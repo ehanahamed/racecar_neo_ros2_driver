@@ -1,0 +1,18 @@
+pwm_node:
+  ros__parameters:
+    serial_port: "/dev/ttyACM0"
+    device_id: 12  # 0x0c — Pololu default
+
+    # Calibrate each axis in two steps:
+    #   1. find _center_pwm by sending command=0 until no motion
+    #   2. raise _magnitude_pwm at command=+1 until visible saturation
+
+    motor_channel: 0
+    motor_center_pwm: 6000
+    motor_magnitude_pwm: 3000
+
+    steering_channel: 1
+    steering_center_pwm: 6300
+    steering_magnitude_pwm: 1900
+    # +steering = left → center - magnitude (ackermann_msgs convention).
+    # Flip steering_sign in gamepad.yaml if the servo is wired the other way.

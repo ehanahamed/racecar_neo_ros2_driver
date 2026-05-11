@@ -29,6 +29,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'gamepad_node = racecar_neo_ros2_driver.gamepad_node:main',
+            'mux_node = racecar_neo_ros2_driver.mux_node:main',
+            'throttle_node = racecar_neo_ros2_driver.throttle_node:main',
+            'pwm_node = racecar_neo_ros2_driver.pwm_node:main',
         ],
     },
 )
