@@ -1,0 +1,45 @@
+# ROS2 build artifacts
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+.eggs/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# colcon
+COLCON_IGNORE
+.colcon-defaults.yaml
+
+# rosdep
+.rosdep_install_marker
+
+# OS / temp
+*.log
+*.tmp
+*.bak
+
+# Local-only configuration overrides
+config/*.local.yaml
