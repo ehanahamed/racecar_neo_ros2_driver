@@ -133,6 +133,18 @@ class TestDecodePixelArray:
         assert all(len(r) == 32 and r == 'X' * 32 for r in rows)
 
 
+class TestSplashConfig:
+    """The splash_message parameter is the new user-tunable in v0.0.6."""
+
+    def test_default_splash_in_config_yaml(self):
+        # The shipped config sets a sane default. Regression guard for the
+        # parameter name AND the welcome message we're branding around.
+        from pathlib import Path
+        cfg = (Path(__file__).parent.parent / 'config' / 'dotmatrix.yaml').read_text()
+        assert 'splash_message:' in cfg
+        assert 'Welcome to RACECAR Neo' in cfg
+
+
 class TestPatchedTinyFont:
     """The module-level TINY_FONT replaces luma's 'N' with a clearer diagonal."""
 

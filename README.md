@@ -93,6 +93,10 @@ racecar service start       # default: start teleop (watchdog follows via Wants=
 racecar service stop        # default: stop teleop (watchdog follows via BindsTo=)
 racecar service logs teleop # journalctl -u racecar-teleop -f
 
+racecar setup all                       # run the 11-phase orchestrator
+racecar setup networking --ssid=foo     # configure eth0 dual-IP + wlan0 AP
+racecar setup networking --show         # print persisted overrides
+
 racecar selftest --dmatrix          # run all dot matrix patterns
 racecar selftest --dmatrix=font     # just the font scroll
 racecar clear --dmatrix             # flash + clear the MAX7219 display
@@ -103,6 +107,44 @@ racecar help                        # full usage
 ```
 
 Tab completion is registered for subcommands; `racecar launch <TAB>` discovers launch files dynamically, `racecar service <TAB>` offers actions, etc.
+
+## Networking (optional)
+
+`scripts/setup_networking.sh` configures two things and is **not** invoked by `setup_all.sh` — it's a separate step because it reconfigures `wlan0` and would drop SSH-over-WiFi sessions during a fresh install. Run it from a wired (eth0) session or directly on the console:
+
+```sh
+racecar setup networking --ssid=racecar-neo-1 --psk='your-password'
+```
+
+What it does:
+
+1. **eth0 dual-IP** via netplan — eth0 carries both a static address (default `192.168.52.200/24`) and a DHCP-assigned address. Lets you reach the robot at a known IP on a wired-only switch *and* via DHCP on a home network.
+2. **wlan0 isolated AP** via NetworkManager — the Pi hosts its own 2.4 GHz WiFi network. Clients can SSH / browse the dashboard / use jupyter, but a NetworkManager dispatcher installs `iptables FORWARD REJECT` rules so AP clients **cannot** route through the Pi to the internet (intentional isolation — keeps the robot's WiFi from becoming a janky general-purpose gateway).
+
+Tunables (persisted to `~/.config/racecar/networking.env` and replayed on every re-run):
+
+| Flag | Default |
+|---|---|
+| `--ssid=NAME` | `racecar-neo-1` |
+| `--psk=PASS` | `racecar@mit` |
+| `--channel=N` | `6` |
+| `--ap-addr=CIDR` | `10.42.0.1/24` |
+| `--eth-static=CIDR` | `192.168.52.200/24` |
+
+Inspect / clear the saved overrides:
+
+```sh
+racecar setup networking --show    # print current persisted values
+racecar setup networking --reset   # delete the file, revert to defaults
+```
+
+Verify after running:
+
+```sh
+ip -br addr show eth0           # static + DHCP both present
+iw dev wlan0 info               # type AP, your SSID, channel 6
+sudo iptables -L FORWARD -n     # two REJECT rules for wlan0
+```
 
 ## Web dashboard
 

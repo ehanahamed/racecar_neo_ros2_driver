@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.0.6] — 2026-05-11
+
+Phase 6: networking. eth0 dual-IP for predictable wired access, wlan0 isolated AP so anyone within range can reach the robot's dashboard / JupyterLab / SSH without needing existing WiFi infrastructure.
+
+### Added
+
+- `scripts/setup_networking.sh` — installs a NetworkManager dispatcher that blocks `FORWARD` on `wlan0` (AP isolation), removes prior WiFi-client connections on `wlan0`, creates the racecar AP via `nmcli` (WPA2 / 2.4 GHz / channel 6 / 10.42.0.1/24), and writes `/etc/netplan/99-racecar-eth0.yaml` with both static (default `192.168.52.200/24`) and DHCP on eth0. Idempotent — re-running only writes files that changed. **Not invoked by `setup_all.sh`** since reconfiguring wlan0 can drop SSH-over-WiFi sessions during a fresh install.
+- All tunables parameterized via env vars (`RACECAR_AP_SSID`, `RACECAR_AP_PSK`, `RACECAR_AP_CHANNEL`, `RACECAR_AP_ADDR`, `RACECAR_ETH_STATIC`) AND via `~/.config/racecar/networking.env` (persisted overrides loaded on every run, current-shell env vars take precedence).
+- `racecar setup <phase>` shell-tool subcommand. Phases:
+  - `all` — runs the 11-phase orchestrator (`scripts/setup_all.sh`)
+  - `networking` — runs `scripts/setup_networking.sh` after persisting any `--flag=value` to `~/.config/racecar/networking.env`. Flags: `--ssid`, `--psk`, `--channel`, `--ap-addr`, `--eth-static`. Plus `--show` (print persisted overrides), `--reset` (delete the persisted file), `--help`.
+- Tab completion: `racecar setup <TAB>` offers `all` / `networking`; `racecar setup networking <TAB>` offers the flag set.
+- `test/test_setup_scripts.py::TestNetworkingScript` — verifies the script exists, executable, `bash -n` clean, references all five `RACECAR_*` env vars, loads the persisted config, has the iptables AP-isolation dispatcher wired up, AND is intentionally **not** referenced from `setup_all.sh`.
+- `test/test_racecar_tool.py::TestSetup` — flag parsing (`--help`, `--show` with/without persisted file, `--reset`), unknown phase / unknown flag error paths.
+- `test/test_setup_scripts.py` gains a `STANDALONE_SCRIPTS` list separating "scripts the orchestrator calls" from "scripts the user runs manually" (currently just `setup_networking.sh`).
+- `docs/networking_test_checklist.md` — walk-through checklist for verifying v0.0.6 networking end-to-end (pre-flight, persistence, the destructive reconfiguration, AP-client connectivity, isolation, idempotency, reboot persistence).
+- `dotmatrix_node` splash screen: new `splash_message` parameter (default `>>> Welcome to RACECAR Neo! >>>`) scrolls once on node startup, then yields to the normal glyph / label / pixels / text render path. New `splash_period_sec` parameter (default 8.0 s) controls the scroll speed independently of the regular `scroll_period_sec`. Empty `splash_message` disables. `/dotmatrix/pixels` and `/dotmatrix/text` interrupt the splash immediately (they sit higher in the priority cascade).
+- `scripts/modprobe.d/blacklist-hid-nintendo.conf` — blacklists `hid_nintendo` so the EasySMX KC-8236 gamepad downgrades to Xbox 360 mode on Pi 5. Installed by `setup_udev.sh`, which also `cmp`-gates an `update-initramfs -u` (needed because `hid_nintendo` can auto-load from initramfs before `/etc/modprobe.d/` is read).
+
+### Fixed
+
+- `racecar setup networking --ssid=foo --show` now persists `foo` BEFORE printing the file contents. The first cut made `--show` short-circuit before the persist step, so flags combined with `--show` were silently lost. Two-pass parse: collect every flag first, then act. Same fix path rejects `--reset` combined with override flags (those would be deleted immediately — almost certainly a user error). Regression covered by `test_networking_flag_persists_when_combined_with_show` and `test_networking_reset_with_overrides_errors`.
+- `scripts/setup_networking.sh` idempotency: previously a no-op re-run still reported "Dispatcher installed" / "Connection already exists — reapplying settings" / "Applying netplan..." (touching the live AP and bouncing eth0 for nothing). Now the script:
+  - Writes the dispatcher only if its content differs (`cmp` vs the live file).
+  - Probes `NetworkManager-dispatcher.service` with `is-enabled --quiet`, not `is-active --quiet` (the service is `Type=simple`, so it's `inactive` between events even though it'll fire correctly).
+  - Diffs each AP-connection setting against `nmcli -g` output before calling `nmcli connection modify`.
+  - Only `nmcli connection up`s the AP when settings changed or the connection isn't currently activated (avoids dropping AP clients during clean re-runs).
+  - Only `netplan apply`s when the netplan YAML actually changed (eliminates the noisy `systemd-networkd is not running` warning on no-op re-runs).
+- `scripts/setup_networking.sh` enables `NetworkManager-dispatcher.service` if it's not already enabled. Without it, the AP-isolation dispatcher script gets installed but never invoked, so the `iptables FORWARD REJECT` rules silently never apply. On Ubuntu Server the service is enabled by default; on Raspberry Pi OS / Ubuntu Desktop it ships disabled, which is what bit us on first install.
+- EasySMX KC-8236 wrong-button-mapping on cold boot: the controller spoofs Nintendo Switch Pro VID:PID (`057e:2009`), and kernels ≥ 5.16 (= every Pi 5 image) ship `hid_nintendo` which claims it and binds it as a Switch controller — A/B/X/Y swapped from Xbox, no `/dev/input/js0`, no force feedback. **Worked fine on Pi 4 only because its older kernel image lacked `hid_nintendo`.** Fix: blacklist `hid_nintendo` system-wide. With the driver out of the way, the controller's firmware times out waiting for a HID handler and downgrades itself to Xbox 360 mode (`2f24:016d`), which binds cleanly to `xpad`. Tradeoff acknowledged: a real Nintendo Switch Pro Controller wouldn't work on the racecar either — not a use case we support. Verified on-robot: `lsusb` reports `2f24:016d`, `/dev/input/js0` present, mux mode-switch via LB/RB works.
+  - **Two earlier attempts were tried and removed:** (a) udev rule unbinding from `usbhid` — `hid-nintendo` re-grabbed instantly; (b) udev rule unbinding from the `nintendo` HID driver directly — same problem, the kernel re-runs match logic and `nintendo` is the only driver willing to claim `057e:2009`. The mode-switch only triggers when no driver responds at all, which requires the system-wide blacklist.
+
+### Changed
+
+- Bumped `<version>` 0.0.5 → 0.0.6 in `package.xml` and `setup.py`.
+- README: new top-level Networking section documenting the workflow, defaults, persistence file location, and verification commands. `racecar` shell-tool list expanded to include `setup`.
+
 ## [0.0.5] — 2026-05-11
 
 Phase 5 polish: log noise eliminated, raspi-config consolidated, real Coral latency test, README brought current with v0.0.3 + v0.0.4 features.
@@ -183,7 +220,8 @@ Sensor integration phase + setup automation + a 107-test pytest suite that cover
 - `maestro.py` `setRange(chan, min, max)` → `setRange(chan, min_target, max_target)` to stop shadowing Python builtins (A002)
 - Imports across the package reordered to Google style (stdlib → third-party, alphabetic within each); multi-line docstrings switched to second-line-summary format (D213)
 
-[Unreleased]: https://github.com/MITRacecarNeo/racecar_neo_ros2_driver/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/MITRacecarNeo/racecar_neo_ros2_driver/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/MITRacecarNeo/racecar_neo_ros2_driver/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/MITRacecarNeo/racecar_neo_ros2_driver/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/MITRacecarNeo/racecar_neo_ros2_driver/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/MITRacecarNeo/racecar_neo_ros2_driver/compare/v0.0.2...v0.0.3

@@ -27,7 +27,15 @@ PHASE_SCRIPTS = [
     'setup_services.sh',
 ]
 ORCHESTRATOR = 'setup_all.sh'
-ALL_SCRIPTS = PHASE_SCRIPTS + [ORCHESTRATOR]
+
+# Scripts that ship with the package but are NOT called by setup_all.sh —
+# the user runs them manually (or via `racecar setup <phase>`) because their
+# side-effects are too disruptive to include in a one-shot install.
+STANDALONE_SCRIPTS = [
+    'setup_networking.sh',  # reconfigures wlan0; can drop SSH-over-WiFi sessions
+]
+
+ALL_SCRIPTS = PHASE_SCRIPTS + [ORCHESTRATOR] + STANDALONE_SCRIPTS
 
 
 @pytest.mark.parametrize('name', ALL_SCRIPTS)
@@ -84,6 +92,63 @@ def test_no_stray_colcon_dirs_in_package():
             f'{stray} exists; colcon was invoked from the wrong CWD. '
             f'Always run `colcon build` from $HOME/ros2_ws, not the package dir.'
         )
+
+
+class TestNetworkingScript:
+    """setup_networking.sh — eth0 dual-IP + wlan0 isolated AP (standalone, not in setup_all.sh)."""
+
+    SCRIPT = SCRIPTS_DIR / 'setup_networking.sh'
+
+    def test_exists_and_executable(self):
+        assert self.SCRIPT.is_file()
+        assert os.access(self.SCRIPT, os.X_OK)
+
+    def test_bash_syntax_clean(self):
+        result = subprocess.run(
+            ['bash', '-n', str(self.SCRIPT)],
+            capture_output=True, text=True, timeout=5,
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_not_in_orchestrator(self):
+        # setup_networking.sh must NOT be in setup_all.sh — it reconfigures
+        # wlan0 and would drop SSH-over-WiFi sessions during a fresh install.
+        text = (SCRIPTS_DIR / 'setup_all.sh').read_text()
+        assert 'setup_networking.sh' not in text, (
+            'setup_networking.sh should be standalone; running it from '
+            'setup_all.sh can drop SSH-over-WiFi sessions during install.'
+        )
+
+    def test_parameterized_via_env_vars(self):
+        # Each tunable should be readable from an environment variable so
+        # the racecar-tool can pass overrides without editing the script.
+        text = self.SCRIPT.read_text()
+        for var in ('RACECAR_AP_SSID', 'RACECAR_AP_PSK', 'RACECAR_AP_CHANNEL',
+                    'RACECAR_AP_ADDR', 'RACECAR_ETH_STATIC'):
+            assert var in text, f'{var} not referenced in setup_networking.sh'
+
+    def test_loads_persisted_config(self):
+        # The script must source the ~/.config/racecar/networking.env file
+        # so the user's persisted overrides apply on every run.
+        text = self.SCRIPT.read_text()
+        assert 'networking.env' in text
+
+    def test_ap_isolation_dispatcher_configured(self):
+        # The whole point of "isolated AP" is the iptables FORWARD reject
+        # rules. Make sure the dispatcher script body is wired up.
+        text = self.SCRIPT.read_text()
+        assert 'iptables' in text
+        assert 'FORWARD' in text
+        assert '99-racecar-ap-isolate' in text
+
+    def test_enables_networkmanager_dispatcher_service(self):
+        # On Ubuntu Server the dispatcher service is enabled by default, but
+        # on Desktop / Raspberry Pi OS it's typically inactive. Without it
+        # the dispatcher script never gets invoked and the isolation rules
+        # silently never apply — exactly the bug v0.0.6 hit on first install.
+        text = self.SCRIPT.read_text()
+        assert 'NetworkManager-dispatcher.service' in text
+        assert 'systemctl enable' in text
 
 
 class TestLaunchWrapper:
@@ -210,3 +275,33 @@ class TestUdevRules:
             'Maestro rule must pin ID_USB_INTERFACE_NUM=00 (command port). '
             'Without this, /dev/maestro may bind to the wrong CDC interface.'
         )
+
+
+class TestHidNintendoBlacklist:
+    """The kernel blacklist that unbreaks the EasySMX KC-8236 on Pi 5."""
+
+    CONF = SCRIPTS_DIR / 'modprobe.d' / 'blacklist-hid-nintendo.conf'
+
+    def test_blacklist_file_exists(self):
+        assert self.CONF.is_file()
+
+    def test_blacklists_hid_nintendo(self):
+        # Must blacklist with the underscore-form module name (`hid_nintendo`,
+        # not `hid-nintendo`); modprobe accepts either, but the underscore
+        # form matches what `lsmod` reports and what the kernel uses internally.
+        text = self.CONF.read_text()
+        assert 'blacklist hid_nintendo' in text
+
+    def test_setup_udev_installs_blacklist(self):
+        # The setup script must copy the .conf to /etc/modprobe.d/ AND
+        # regenerate the initramfs (since hid_nintendo can be loaded from
+        # initramfs before /etc/modprobe.d/ is read).
+        text = (SCRIPTS_DIR / 'setup_udev.sh').read_text()
+        assert 'blacklist-hid-nintendo.conf' in text
+        assert '/etc/modprobe.d/' in text
+        # initramfs regen MUST be conditional on a content change — a fresh
+        # update-initramfs takes ~30s and we'd run it on every setup_all.sh.
+        assert 'update-initramfs' in text
+        # And we should unload the running module so the change applies in
+        # this boot (otherwise it only takes effect on the next reboot).
+        assert 'modprobe -r hid_nintendo' in text

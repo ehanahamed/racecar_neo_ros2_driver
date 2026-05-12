@@ -192,6 +192,10 @@ class DotMatrixNode(Node):
         self.declare_parameter('refresh_rate_hz', 15.0)
         self.declare_parameter('scroll_period_sec', 4.0)
         self.declare_parameter('pixels_timeout_sec', 5.0)
+        self.declare_parameter(
+            'splash_message', '>>> Welcome to RACECAR Neo! >>>'
+        )
+        self.declare_parameter('splash_period_sec', 8.0)
         self.declare_parameter('gamepad_enable_button', 4)
         self.declare_parameter('autonomy_enable_button', 5)
 
@@ -204,6 +208,8 @@ class DotMatrixNode(Node):
         refresh_rate = self.get_parameter('refresh_rate_hz').value
         self._scroll_period = self.get_parameter('scroll_period_sec').value
         self._pixels_timeout = self.get_parameter('pixels_timeout_sec').value
+        self._splash_message = self.get_parameter('splash_message').value
+        self._splash_period = self.get_parameter('splash_period_sec').value
         self._gamepad_btn = self.get_parameter('gamepad_enable_button').value
         self._auto_btn = self.get_parameter('autonomy_enable_button').value
 
@@ -236,6 +242,11 @@ class DotMatrixNode(Node):
         self._start_time = time.monotonic()
         self._pixels_rows: list = []     # row-string list when active, else []
         self._pixels_stamp = 0.0          # monotonic time of last pixel message
+        # Splash plays once on startup, then yields to the normal render path.
+        # Empty splash_message disables. Pixels / text / mode override it
+        # immediately (the priority cascade in _render checks those first).
+        self._splash_start = time.monotonic() if self._splash_message else 0.0
+        self._splash_done = not self._splash_message
 
         qos = QoSProfile(
             depth=1,
@@ -279,7 +290,8 @@ class DotMatrixNode(Node):
             self.get_logger().warn(f'Invalid /dotmatrix/pixels message: {e}')
 
     def _render(self):
-        # Priority: custom pixels (if fresh) > /dotmatrix/text > glyph+label.
+        # Priority: custom pixels (if fresh) > /dotmatrix/text > splash (until
+        # one full scroll completes) > glyph+label.
         if self._pixels_rows and (
             time.monotonic() - self._pixels_stamp
         ) <= self._pixels_timeout:
@@ -289,6 +301,23 @@ class DotMatrixNode(Node):
                         if cell == 'X':
                             draw.point((col_idx, row_idx), fill='white')
             return
+
+        if not self._user_text and not self._splash_done:
+            elapsed = time.monotonic() - self._splash_start
+            splash_width = rendered_text_width(self._splash_message, self._font)
+            # The splash always scrolls (it's intentionally long enough not to
+            # fit). One full pass = splash_period_sec; after that, yield.
+            if elapsed >= self._splash_period:
+                self._splash_done = True
+            else:
+                offset = scroll_offset(
+                    elapsed, splash_width, self._viewport_width,
+                    self._splash_period,
+                )
+                with canvas(self._device) as draw:
+                    text(draw, (-offset, 1), self._splash_message,
+                         fill='white', font=self._font)
+                return
 
         if not self._user_text:
             # Glyph on module 1 (x=0..7), label centered in modules 2-3

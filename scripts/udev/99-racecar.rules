@@ -27,3 +27,11 @@ ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="057
 # Pre-init: 1a6e:089a (Global Unichip). Post-init (after firmware load): 18d1:9302 (Google).
 SUBSYSTEM=="usb", ATTRS{idVendor}=="1a6e", ATTRS{idProduct}=="089a", GROUP="plugdev", MODE="0660"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="18d1", ATTRS{idProduct}=="9302", GROUP="plugdev", MODE="0660"
+
+# EasySMX gamepad / Switch-Pro-spoof recovery is handled by blacklisting
+# the hid_nintendo module instead — see scripts/modprobe.d/blacklist-hid-nintendo.conf
+# and the install logic in setup_udev.sh. udev-based unbind approaches were
+# attempted in earlier v0.0.6 iterations but didn't work: hid-nintendo
+# re-grabs the device immediately after each unbind, so the controller's
+# firmware never sees the "HID rejected" condition long enough to downgrade
+# itself to Xbox 360 mode.

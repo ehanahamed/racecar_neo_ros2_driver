@@ -153,6 +153,127 @@ __RC_SVC_HELP__
             esac
             ;;
 
+        setup)
+            local phase="${1:-}"
+            shift || true
+            case "$phase" in
+                "")
+                    echo "usage: racecar setup <phase>" >&2
+                    echo "  phases: all, networking" >&2
+                    return 2
+                    ;;
+                all)
+                    bash "$pkg_dir/scripts/setup_all.sh" "$@"
+                    ;;
+                networking)
+                    # Persist any --flag values to ~/.config/racecar/networking.env
+                    # so subsequent runs (and reboots) keep the same settings.
+                    local cfg_dir="$HOME/.config/racecar"
+                    local cfg_file="$cfg_dir/networking.env"
+                    mkdir -p "$cfg_dir"
+
+                    # Load existing persisted values into a local assoc array.
+                    local -A vals=()
+                    if [[ -f "$cfg_file" ]]; then
+                        while IFS='=' read -r k v; do
+                            [[ -z "$k" || "$k" =~ ^# ]] && continue
+                            v="${v%\"}"; v="${v#\"}"
+                            vals["$k"]="$v"
+                        done < "$cfg_file"
+                    fi
+
+                    # Pass 1: parse every flag into either vals[] (overrides)
+                    # or an action variable. Don't act yet — that way `--ssid=foo
+                    # --show` persists foo before showing, and `--ssid=foo --reset`
+                    # is rejected as nonsense (would be lost immediately).
+                    local action="apply"   # default: persist + run setup_networking.sh
+                    local vals_changed=0
+                    while [[ "$1" == --* ]]; do
+                        local arg="$1"; shift
+                        local key val
+                        if [[ "$arg" == *=* ]]; then
+                            key="${arg%%=*}"; val="${arg#*=}"
+                        else
+                            key="$arg"; val="${1:-}"; shift || true
+                        fi
+                        case "$key" in
+                            --ssid)        vals[RACECAR_AP_SSID]="$val";    vals_changed=1 ;;
+                            --psk)         vals[RACECAR_AP_PSK]="$val";     vals_changed=1 ;;
+                            --channel)     vals[RACECAR_AP_CHANNEL]="$val"; vals_changed=1 ;;
+                            --ap-addr)     vals[RACECAR_AP_ADDR]="$val";    vals_changed=1 ;;
+                            --eth-static)  vals[RACECAR_ETH_STATIC]="$val"; vals_changed=1 ;;
+                            --show)        action="show" ;;
+                            --reset)       action="reset" ;;
+                            --help|-h)     action="help" ;;
+                            *)
+                                echo "racecar setup networking: unknown flag '$key'" >&2
+                                return 2
+                                ;;
+                        esac
+                    done
+
+                    if [[ "$action" == "help" ]]; then
+                        cat <<'__RC_NET_HELP__'
+usage: racecar setup networking [--ssid=NAME] [--psk=PASS]
+                                [--channel=N] [--ap-addr=CIDR]
+                                [--eth-static=CIDR]
+                                [--show] [--reset]
+Persists any --flag values to ~/.config/racecar/networking.env and then
+runs scripts/setup_networking.sh (eth0 dual-IP + wlan0 isolated AP).
+  --show   print current persisted overrides and exit
+  --reset  delete the persisted file (revert to script defaults)
+Persistence runs BEFORE --show or --reset, so
+  racecar setup networking --ssid=foo --show
+saves foo, then prints the new file contents.
+WARNING: this reconfigures wlan0. If you're SSH'd over WiFi, run from a
+wired session or the console instead.
+__RC_NET_HELP__
+                        return 0
+                    fi
+
+                    if [[ "$action" == "reset" ]]; then
+                        if [[ $vals_changed -eq 1 ]]; then
+                            echo "racecar setup networking: --reset cannot be combined with override flags" >&2
+                            return 2
+                        fi
+                        rm -f "$cfg_file"
+                        echo "Cleared $cfg_file; defaults will apply on next run."
+                        return 0
+                    fi
+
+                    # Persist any new --flag values (applies to apply/show paths).
+                    if [[ $vals_changed -eq 1 ]]; then
+                        : > "$cfg_file"
+                        chmod 600 "$cfg_file"
+                        echo "# racecar networking overrides — managed by 'racecar setup networking'" >> "$cfg_file"
+                        for k in RACECAR_AP_SSID RACECAR_AP_PSK RACECAR_AP_CHANNEL RACECAR_AP_ADDR RACECAR_ETH_STATIC; do
+                            if [[ -n "${vals[$k]:-}" ]]; then
+                                printf '%s="%s"\n' "$k" "${vals[$k]}" >> "$cfg_file"
+                            fi
+                        done
+                        echo "Saved overrides to $cfg_file"
+                    fi
+
+                    if [[ "$action" == "show" ]]; then
+                        if [[ -s "$cfg_file" ]]; then
+                            echo "Persisted networking config ($cfg_file):"
+                            cat "$cfg_file"
+                        else
+                            echo "No persisted networking config — script defaults will apply."
+                        fi
+                        return 0
+                    fi
+
+                    bash "$pkg_dir/scripts/setup_networking.sh"
+                    ;;
+                *)
+                    echo "racecar setup: unknown phase '$phase'" >&2
+                    echo "  phases: all, networking" >&2
+                    return 2
+                    ;;
+            esac
+            ;;
+
         cleanup)
             # Find orphaned/stale racecar processes + FastRTPS SHM segments.
             # Dry-run by default; pass --force to actually kill / remove.
@@ -329,6 +450,14 @@ Commands:
     watchdog            Run the node watchdog (restart-on-failure supervisor).
                         Monitors control + sensor nodes; logs to
                         ~/logs/latest/watchdog.log. Assumes teleop runs separately.
+    setup <phase>       Run a setup script. Phases:
+                          all          — setup_all.sh (the 11-phase orchestrator)
+                          networking   — eth0 dual-IP + wlan0 isolated AP.
+                                         Flags persist to ~/.config/racecar/networking.env:
+                                           --ssid=NAME   --psk=PASS   --channel=N
+                                           --ap-addr=CIDR (default 10.42.0.1/24)
+                                           --eth-static=CIDR (default 192.168.52.200/24)
+                                           --show / --reset
     service <action>    systemd service control. Actions:
                           install              setup_services.sh (drop + enable units)
                           start [name]         default: teleop (watchdog follows)
@@ -373,7 +502,7 @@ _racecar_complete() {
     local sub="${COMP_WORDS[1]:-}"
 
     if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "build test source cd teleop launch clear udev watchdog service cleanup selftest status help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "build test source cd teleop launch clear udev watchdog service setup cleanup selftest status help" -- "$cur") )
         return
     fi
 
@@ -391,6 +520,13 @@ _racecar_complete() {
             ;;
         cleanup)
             COMPREPLY=( $(compgen -W "--dry-run --force --help" -- "$cur") )
+            ;;
+        setup)
+            if [[ $COMP_CWORD -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "all networking" -- "$cur") )
+            elif [[ "${COMP_WORDS[2]}" == "networking" ]]; then
+                COMPREPLY=( $(compgen -W "--ssid= --psk= --channel= --ap-addr= --eth-static= --show --reset --help" -- "$cur") )
+            fi
             ;;
         service)
             if [[ $COMP_CWORD -eq 2 ]]; then

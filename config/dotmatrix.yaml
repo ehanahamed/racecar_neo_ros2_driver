@@ -25,6 +25,13 @@ dotmatrix_node:
     # or the mode glyph.
     pixels_timeout_sec: 5.0
 
+    # One-shot startup message: scrolls once on dotmatrix_node launch, then
+    # yields to the normal mode-glyph render. Empty string disables the splash.
+    splash_message: ">>> Welcome to RACECAR Neo! >>>"
+    # Seconds for the splash to complete one full pass. Slower than the
+    # general scroll_period_sec since the splash is a one-shot first impression.
+    splash_period_sec: 8.0
+
     # Match the mux button mapping so the mode glyph tracks LB/RB.
     gamepad_enable_button: 4
     autonomy_enable_button: 5
