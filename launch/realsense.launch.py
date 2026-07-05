@@ -1,12 +1,18 @@
-"""Launch the Intel RealSense D435i for RACECAR Neo v2."""
+"""Intel RealSense D435i as the RACECAR Neo v2 forward camera."""
 
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction, \
-    IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    IncludeLaunchDescription,
+    TimerAction,
+)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from ament_index_python.packages import get_package_share_directory
-import os
+from launch_ros.actions import SetRemap
 
 
 def generate_launch_description():
@@ -100,5 +106,12 @@ def generate_launch_description():
         depth_profile_arg,
         color_profile_arg,
         fix_imu_permissions,
+        # Publish the color stream as /camera/forward, the forward-camera topic
+        # edgetpu_node and the student library (camera_real.py) already read, so
+        # replacing the Logitech BRIO with the RealSense needs no downstream
+        # change. SetRemap applies to the node inside the included rs_launch.
+        # VERIFY on the Pi that this propagates; if not, fall back to a
+        # topic relay or a direct realsense2_camera_node with remappings.
+        SetRemap(src='/camera/color/image_raw', dst='/camera/forward'),
         realsense_launch,
     ])

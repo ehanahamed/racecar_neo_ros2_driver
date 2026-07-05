@@ -11,7 +11,7 @@ edgetpu_node:
     # Cap detections per frame; 0 = no limit.
     max_detections: 0
 
-    # Forward camera by default (gscam → /camera/forward).
+    # Forward camera by default (RealSense color on /camera/forward).
     image_topic: "/camera/forward"
 
     # Heartbeat + stale-input watchdog.

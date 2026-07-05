@@ -10,7 +10,7 @@
 #
 # No reboot required. The udev rule takes effect immediately.
 
-set -e
+set -eo pipefail
 
 echo "=== RealSense D435i Setup ==="
 

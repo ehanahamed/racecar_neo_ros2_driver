@@ -36,11 +36,8 @@ MONITORED = {
     'gamepad': {'topic': '/gamepad_drive', 'label': 'Gamepad', 'supervised': True},
     'imu': {'topic': '/imu', 'label': 'LSM9DS1 IMU', 'supervised': True},
     'lidar': {'topic': '/scan', 'label': 'RPLIDAR', 'supervised': True},
-    'camera_forward': {'topic': '/camera/forward', 'label': 'BRIO (forward)', 'supervised': True},
-    'camera_backward': {
-        'topic': '/camera/backward', 'label': 'Arducam (backward)', 'supervised': True},
     'realsense': {
-        'topic': '/camera/color/image_raw', 'label': 'RealSense D435i', 'supervised': True},
+        'topic': '/camera/forward', 'label': 'RealSense D435i (forward)', 'supervised': True},
     'edgetpu': {'topic': '/edgetpu/inference', 'label': 'Coral EdgeTPU', 'supervised': False},
     'dotmatrix': {'topic': '/dotmatrix/pixels', 'label': 'Dot matrix', 'supervised': False},
 }
@@ -51,8 +48,6 @@ RATE_TOPICS = [
     '/imu',
     '/scan',
     '/camera/forward',
-    '/camera/backward',
-    '/camera/color/image_raw',
     '/camera/depth/image_rect_raw',
     '/camera/imu',
     '/edgetpu/inference',

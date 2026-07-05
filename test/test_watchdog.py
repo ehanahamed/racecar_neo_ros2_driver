@@ -40,7 +40,7 @@ class TestNodesDict:
 
     EXPECTED_NAMES = {
         'pwm', 'throttle', 'mux', 'gamepad',
-        'imu', 'lidar', 'camera_forward', 'camera_backward',
+        'imu', 'lidar', 'realsense',
     }
     REQUIRED_KEYS = {'topic', 'launch', 'device_check', 'device_label',
                      'kill_pattern', 'process_check'}
@@ -82,20 +82,9 @@ class TestNodesDict:
         result = cb()
         assert isinstance(result, bool)
 
-    def test_camera_kill_patterns_disambiguate(self, watchdog):
-        # Both cameras run the same gscam_node binary; the kill_pattern must
-        # match argv (__node:=camera_forward / camera_backward), not just the
-        # binary path — otherwise pkill kills both whenever one dies.
-        fwd = watchdog.NODES['camera_forward']['kill_pattern']
-        bwd = watchdog.NODES['camera_backward']['kill_pattern']
-        assert 'camera_forward' in fwd
-        assert 'camera_backward' in bwd
-        assert fwd != bwd
-
-    def test_camera_backward_has_restart_delay(self, watchdog):
-        # USB bus settle — required so the Arducam reattaches cleanly after
-        # restart. Forward camera doesn't need it (single-USB hub branch).
-        assert watchdog.NODES['camera_backward'].get('restart_delay', 0) >= 1
+    def test_realsense_topic(self, watchdog):
+        # RealSense color is remapped onto /camera/forward (the only camera).
+        assert watchdog.NODES['realsense']['topic'] == '/camera/forward'
 
     def test_lidar_has_freshness_threshold(self, watchdog):
         # sllidar can silently desync from the CP2102 (the SDK swallows

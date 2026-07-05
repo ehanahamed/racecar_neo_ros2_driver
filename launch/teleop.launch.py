@@ -5,8 +5,7 @@ Control pipeline (gamepad/mux/throttle/pwm + joy_node) is always brought up.
 Each sensor/ML/display subsystem can be disabled via a name_enable arg
 (default 'true') -- for instance, edgetpu_enable:=false skips the Coral.
 EdgeTPU is delayed 10s so Coral USB firmware enumerates before
-make_interpreter runs; the backward camera is delayed 5s to stagger USB
-bus contention.
+make_interpreter runs.
 """
 
 import os
@@ -21,7 +20,7 @@ from launch_ros.actions import Node
 
 
 _SUBSYSTEMS = (
-    'imu', 'lidar', 'camera_forward', 'camera_backward', 'realsense', 'edgetpu', 'dotmatrix',
+    'imu', 'lidar', 'realsense', 'edgetpu', 'dotmatrix',
 )
 
 
@@ -100,12 +99,9 @@ def generate_launch_description():
 
     imu_launch = _gated_include('imu')
     lidar_launch = _gated_include('lidar')
-    camera_forward_launch = _gated_include('camera_forward')
-    # Backward camera delayed 5s — gives the forward camera time to grab its
-    # USB bandwidth share before the Arducam starts negotiating.
-    camera_backward_launch = _gated_include('camera_backward', delay=5.0)
-    # RealSense D435i — native /camera/{color,depth,imu} namespace (additive,
-    # does not collide with /camera/forward or /camera/backward).
+    # RealSense D435i is the forward camera; its color stream is remapped to
+    # /camera/forward in realsense.launch.py, with depth on
+    # /camera/depth/image_rect_raw and the camera IMU on /camera/imu.
     realsense_launch = _gated_include('realsense')
     # EdgeTPU delayed 10s — Coral USB firmware enumeration (1a6e:089a →
     # 18d1:9302) needs to complete before make_interpreter runs.
@@ -118,6 +114,6 @@ def generate_launch_description():
         *enable_args,
         joy, gamepad, mux, throttle, pwm,
         imu_launch, lidar_launch,
-        camera_forward_launch, camera_backward_launch, realsense_launch,
+        realsense_launch,
         edgetpu_launch, dotmatrix_launch,
     ])

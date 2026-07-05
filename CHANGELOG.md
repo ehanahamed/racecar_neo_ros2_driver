@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-05
+
+Camera subsystem moves to an Intel RealSense D435i as the single forward camera, retiring the Logitech BRIO / Arducam gscam hybrid. The RealSense color stream is published on `/camera/forward`, the topic `edgetpu_node` and the student library (`camera_real.py`) already read, so the forward-camera contract is unchanged while the physical source and the depth/IMU streams are new.
+
+### Added
+
+- **`launch/realsense.launch.py`** brings up the D435i via `realsense2_camera` (`rs_launch.py` with Pi 5 tuned profiles) and a `SetRemap` that publishes the color stream as `/camera/forward`. Depth is on `/camera/depth/image_rect_raw`, the camera IMU on `/camera/imu`. A pre-launch `fix-realsense-imu.sh` sets the HID-sensor IIO permissions the D435i IMU needs on the Pi 5.
+- **`scripts/setup_realsense.sh`** (phase 8 of `setup_all.sh`) installs `realsense2_camera` and the IMU permission fix (script, udev rule, boot service).
+- **`realsense2_camera`** dependency in `package.xml`.
+- **`docs/realsense_topics.md`** documents the streams, profiles, and known issues.
+- RealSense hardware check in `test/test_hardware.py` (USB `8086:0b3a`).
+
+### Changed
+
+- **`/camera/forward` is now the RealSense color stream** rather than the BRIO gscam feed; `edgetpu_node` and the student library need no change. The `realsense` entries in `watchdog.py` and `dashboard.py` track `/camera/forward`.
+- **`teleop.launch.py`** launches `realsense` in place of `camera_forward` + `camera_backward`.
+
+### Removed
+
+- **Logitech BRIO forward camera and Arducam B0578 backward camera**, including `launch/camera_forward.launch.py`, `launch/camera_backward.launch.py`, and the four `config/camera_{forward,backward}*.yaml` files. There is no backward camera; the `/camera/backward` topic is gone.
+- **`gscam` dependency** and **`scripts/patch_gscam.sh`** (the gscam overlay build/patch phase). `setup_all.sh` is now eleven phases.
+- **`/dev/cam_forward` and `/dev/cam_backward`** udev symlinks.
+
+### Notes
+
+- `realsense2_camera` is not installable on the dev workstation, so the D435i launch and the `SetRemap` onto `/camera/forward` are verified by build + lint here and need a bench check on the Pi. If `SetRemap` does not propagate into the included `rs_launch.py`, the fallback is a `topic_tools relay` (already an apt dependency) or a direct `realsense2_camera_node` with a remapping.
+
 ## [0.1.0] — 2026-05-13
 
 QoL: give the `racecar` tool authority over which `~/jupyter_ws/<folder>/library/` is on Python's `sys.path`, so student scripts (e.g. `labs/demo.py`) can `import racecar_core` without a manually-placed `.pth` or `sys.path` hack. Matches the sim installer's existing convention (a `racecar_student.pth` in site-packages) but anchored to user site-packages since the Pi has no venv.

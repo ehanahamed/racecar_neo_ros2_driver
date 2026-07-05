@@ -22,9 +22,7 @@ This package is the v2 successor to [`racecar-neo-ros2-backend`](https://github.
 
 | Subsystem | Component | Interface |
 |---|---|---|
-| Forward camera | Logitech BRIO | gscam over V4L2 (`/dev/cam_forward`) |
-| Backward camera | Arducam B0578 | gscam over V4L2 (`/dev/cam_backward`) |
-| Depth camera | Intel RealSense D435i | librealsense over USB 3.x (`8086:0b3a`) |
+| Camera (color+depth+IMU) | Intel RealSense D435i | realsense2_camera over USB 3.x (`8086:0b3a`) |
 | 2D LIDAR | RPLIDAR A3-class | UART (`/dev/lidar`) |
 | IMU | LSM9DS1 | I²C (`0x6B` + `0x1E`) |
 | Gamepad | Switch Pro / EasySMX | USB HID (`/dev/input/event*` or `/dev/input/js*`) |
@@ -32,7 +30,7 @@ This package is the v2 successor to [`racecar-neo-ros2-backend`](https://github.
 | ML inference | Coral EdgeTPU | USB |
 | Display | MAX7219 dot matrix (3 cascaded) | SPI (`/dev/spidev0.0`) |
 
-All `/dev/*` paths are stable udev symlinks installed by `scripts/setup_udev.sh` — devices won't shift between `ttyACM0`/`ttyACM1` or `video0`/`video4` across reboots.
+All `/dev/*` paths are stable udev symlinks installed by `scripts/setup_udev.sh`, so devices won't shift between `ttyACM0` and `ttyACM1` across reboots.
 
 ## Architecture
 
@@ -43,8 +41,8 @@ EasySMX ─→ joy_node ─→ gamepad_node ──┐
 ```
 
 Sensor and ML nodes publish independently:
-- `/camera/forward`, `/camera/backward` (sensor_msgs/Image)
-- `/camera/color/image_raw`, `/camera/depth/image_rect_raw`, `/camera/imu` (RealSense D435i — depth, color, IMU)
+- `/camera/forward` (sensor_msgs/Image): RealSense D435i color stream, remapped onto the forward-camera topic
+- `/camera/depth/image_rect_raw`, `/camera/imu` (sensor_msgs/Image, sensor_msgs/Imu): RealSense D435i depth and camera IMU
 - `/imu`, `/mag` (sensor_msgs/Imu, MagneticField)
 - `/scan` (sensor_msgs/LaserScan)
 - `/edgetpu/inference` (vision_msgs/Detection2DArray) — `edgetpu_node` consumes `/camera/forward`
@@ -118,7 +116,7 @@ groups                   # verify: dialout i2c spi gpio video should appear
 
 ### 6. Plug in the hardware and reboot
 
-With the Pi powered off: connect the Maestro, both cameras, the lidar, the dot matrix (SPI), the IMU (I²C), the Coral EdgeTPU, and the EasySMX gamepad's USB dongle. Power on and:
+With the Pi powered off: connect the Maestro, the RealSense camera, the lidar, the dot matrix (SPI), the IMU (I²C), the Coral EdgeTPU, and the EasySMX gamepad's USB dongle. Power on and:
 
 ```sh
 sudo reboot
@@ -145,20 +143,19 @@ This brings up an isolated AP on `wlan0` and configures eth0 with both a static 
 
 ### What `setup_all.sh` actually does
 
-Twelve phases, all under `scripts/`:
+Eleven phases, all under `scripts/`:
 
-1. **`setup_ros2.sh`** — ROS2 Jazzy apt repo + message/driver packages
-2. **`setup_dev_tools.sh`** — build tools, Python hardware libs (`smbus` / `serial` / `spidev`), GStreamer dev headers
-3. **`setup_user_env.sh`** — joins `dialout` / `i2c` / `spi` / `gpio` / `video` groups; sources ROS2 + the `racecar` shell tool in `.bashrc`
-4. **`setup_raspi_config.sh`** — `raspi-config` flags: enable I2C, enable SPI, disable serial console (frees `/dev/serial0`)
-5. **`setup_udev.sh`** — installs `/etc/udev/rules.d/99-racecar.rules` (stable `/dev/maestro` etc.)
-6. **`setup_dotmatrix.sh`** — `pip install --user luma.led_matrix`
-7. **`setup_coral.sh`** — installs `libedgetpu1-std`, `tflite_runtime`, `pycoral` from vendored `depend/` artifacts
-8. **`setup_realsense.sh`** — installs `realsense2_camera` (apt) + the Pi 5 IMU IIO permission fix (script, udev rule, boot service)
-9. **`patch_gscam.sh`** — clones `ros-drivers/gscam`, applies the appsink memory-leak fix, builds it as a colcon overlay
-10. **`setup_workspace.sh`** — clones `sllidar_ros2` and runs `colcon build --symlink-install`
-11. **`setup_jupyter.sh`** — `pip install --user jupyterlab`, creates `~/jupyter_ws/`
-12. **`setup_services.sh`** — installs and enables the four systemd units (`racecar-{teleop,watchdog,dashboard,jupyter}.service`)
+1. **`setup_ros2.sh`**: ROS2 Jazzy apt repo + message/driver packages
+2. **`setup_dev_tools.sh`**: build tools, Python hardware libs (`smbus` / `serial` / `spidev`)
+3. **`setup_user_env.sh`**: joins `dialout` / `i2c` / `spi` / `gpio` / `video` groups; sources ROS2 + the `racecar` shell tool in `.bashrc`
+4. **`setup_raspi_config.sh`**: `raspi-config` flags: enable I2C, enable SPI, disable serial console (frees `/dev/serial0`)
+5. **`setup_udev.sh`**: installs `/etc/udev/rules.d/99-racecar.rules` (stable `/dev/maestro`, `/dev/lidar`)
+6. **`setup_dotmatrix.sh`**: `pip install --user luma.led_matrix`
+7. **`setup_coral.sh`**: installs `libedgetpu1-std`, `tflite_runtime`, `pycoral` from vendored `depend/` artifacts
+8. **`setup_realsense.sh`**: installs `realsense2_camera` (apt) + the Pi 5 IMU IIO permission fix (script, udev rule, boot service)
+9. **`setup_workspace.sh`**: clones `sllidar_ros2` and runs `colcon build --symlink-install`
+10. **`setup_jupyter.sh`**: `pip install --user jupyterlab`, creates `~/jupyter_ws/`
+11. **`setup_services.sh`**: installs and enables the four systemd units (`racecar-{teleop,watchdog,dashboard,jupyter}.service`)
 
 Individual phase scripts can be run on their own to re-do or skip steps (e.g. `racecar setup networking` for just the networking phase, or `bash scripts/setup_udev.sh` to reinstall the udev rules after a hardware swap).
 
@@ -240,7 +237,7 @@ Once `racecar-teleop.service` is running, browse to `http://<robot>:8080` for a 
 
 - **Nodes**: one card per monitored subsystem (10 total) — green when the expected topic is being advertised, red when not.
 - **System Health**: RTC backup battery voltage (green ≥ 3.0 V, yellow 2.7–3.0 V, red < 2.7 V) and the Pi 5 PMIC sticky under-voltage alarm.
-- **Topic Rates**: live Hz for `/motor`, `/mux_out`, `/imu`, `/scan`, both cameras, and `/edgetpu/inference`. Yellow when stale (< 0.5 Hz), red when missing.
+- **Topic Rates**: live Hz for `/motor`, `/mux_out`, `/imu`, `/scan`, `/camera/forward`, and `/edgetpu/inference`. Yellow when stale (< 0.5 Hz), red when missing.
 - **Watchdog Log**: tail of `~/logs/latest/watchdog.log` so you can see restart events.
 
 Refreshes every 3 s; System Health refreshes on a slower 60 s cadence (RTC drifts on the order of weeks, not seconds).
@@ -263,9 +260,7 @@ source install/setup.bash
 
 ```sh
 racecar teleop                          # or: ros2 launch racecar_neo_ros2_driver teleop.launch.py
-racecar launch camera_forward           # individual nodes too
-racecar launch camera_backward
-racecar launch realsense                # RealSense D435i (depth + color + IMU)
+racecar launch realsense                # individual nodes too: RealSense D435i (color + depth + IMU)
 racecar launch imu
 racecar launch lidar
 racecar launch edgetpu

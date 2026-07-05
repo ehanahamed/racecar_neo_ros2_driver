@@ -1,10 +1,10 @@
-# RealSense D435i Topic Reference — UAV Neo
+# RealSense D435i topic reference
 
-Reference of ROS2 topics published by the Intel RealSense D435i using `realsense2_camera`.
+ROS2 topics published by the Intel RealSense D435i using `realsense2_camera`, launched by `launch/realsense.launch.py`. The D435i is the only camera on RACECAR Neo v2: its color stream is remapped onto `/camera/forward` (the forward-camera contract consumed by `edgetpu_node` and the student library), depth publishes on `/camera/depth/image_rect_raw`, and the camera IMU on `/camera/imu`.
 
-> **Hardware:** Intel RealSense D435i (USB 3.2, serial 943222073786, firmware 5.17.0.9)
+> **Hardware:** Intel RealSense D435i (USB 3.x, `8086:0b3a`, firmware 5.17.0.9)
 
-Rates measured on UAV Neo hardware (Raspberry Pi 5, depth + color + IMU enabled at 640x480 @ 30 FPS with depth filters on, IR and alignment disabled).
+Rates measured on RACECAR Neo hardware (Raspberry Pi 5, depth + color + IMU enabled at 640x480 @ 30 FPS with depth filters on, IR and alignment disabled).
 
 ---
 
@@ -34,9 +34,11 @@ Rates measured on UAV Neo hardware (Raspberry Pi 5, depth + color + IMU enabled 
 
 ## Color (RGB)
 
+The color image is remapped to `/camera/forward` so `edgetpu_node` and the student library keep the forward-camera contract.
+
 | Topic | Message Type | Configured | Measured | Description |
 |---|---|---|---|---|
-| `/camera/color/image_raw` | `sensor_msgs/msg/Image` | 30 Hz | ~26 Hz | Raw color image (RGB8, 640x480) |
+| `/camera/forward` | `sensor_msgs/msg/Image` | 30 Hz | ~26 Hz | Color image (RGB8, 640x480), remapped from `/camera/color/image_raw` |
 | `/camera/color/camera_info` | `sensor_msgs/msg/CameraInfo` | 30 Hz | ~26 Hz | Color camera intrinsics and distortion |
 
 ## Infrared
@@ -46,7 +48,7 @@ Rates measured on UAV Neo hardware (Raspberry Pi 5, depth + color + IMU enabled 
 | `/camera/infra1/image_rect_raw` | `sensor_msgs/msg/Image` | 30 Hz | ~28 Hz | Left infrared camera (Y8, 640x480) |
 | `/camera/infra2/image_rect_raw` | `sensor_msgs/msg/Image` | 30 Hz | ~28 Hz | Right infrared camera (Y8, 640x480) |
 
-> **Disabled by default** in the UAV Neo config to reduce CPU load. Enable with: `enable_infra1:=true enable_infra2:=true` in the RealSense launch args. Stereo infrared is useful for VIO and feature tracking in low-light conditions.
+> **Disabled by default** to reduce CPU load. Enable with: `enable_infra1:=true enable_infra2:=true` in the RealSense launch args. Stereo infrared is useful for VIO and feature tracking in low-light conditions.
 
 ## IMU
 
@@ -69,7 +71,7 @@ Rates measured on UAV Neo hardware (Raspberry Pi 5, depth + color + IMU enabled 
 | `/camera/aligned_depth_to_color/image_raw` | `sensor_msgs/msg/Image` | 30 Hz | ~18 Hz | Depth image aligned to the color camera frame |
 | `/camera/aligned_depth_to_color/camera_info` | `sensor_msgs/msg/CameraInfo` | 30 Hz | ~18 Hz | Camera info matching the aligned depth |
 
-> **Disabled by default** in the UAV Neo config to reduce CPU load. Enable with: `ros2 launch uav_neo_ros2_driver realsense.launch.py align_depth_enable:=true`. Alignment is CPU intensive (~10% additional CPU on Pi 5). Essential for tasks that combine color and depth (object detection with distance, RGBD SLAM).
+> **Disabled by default** to reduce CPU load. Enable with: `ros2 launch racecar_neo_ros2_driver realsense.launch.py align_depth_enable:=true`. Alignment is CPU intensive (~10% additional CPU on Pi 5). Essential for tasks that combine color and depth (object detection with distance, RGBD SLAM).
 
 ## Point Cloud
 
@@ -77,7 +79,7 @@ Rates measured on UAV Neo hardware (Raspberry Pi 5, depth + color + IMU enabled 
 |---|---|---|---|
 | `/camera/depth/color/points` | `sensor_msgs/msg/PointCloud2` | Up to 30 Hz | Colored 3D point cloud (XYZRGB) |
 
-> **Disabled by default** in the UAV Neo config — point cloud generation is CPU intensive on the Pi 5. Enable with: `ros2 launch uav_neo_ros2_driver realsense.launch.py pointcloud_enable:=true`
+> **Disabled by default**; point cloud generation is CPU intensive on the Pi 5. Enable with: `ros2 launch racecar_neo_ros2_driver realsense.launch.py pointcloud_enable:=true`
 
 ## Camera Info and Metadata
 
@@ -119,7 +121,7 @@ camera_link
 
 ### Resolution and Framerate
 
-The default UAV Neo config runs at 640x480 @ 15 FPS for depth and color streams. Available profiles for D435i:
+The default config runs at 640x480 @ 15 FPS for depth and color streams. Available profiles for D435i:
 
 | Resolution | Max FPS (Depth) | Max FPS (Color) | Notes |
 |---|---|---|---|
@@ -130,7 +132,7 @@ The default UAV Neo config runs at 640x480 @ 15 FPS for depth and color streams.
 To change resolution, pass launch arguments:
 
 ```bash
-ros2 launch uav_neo_ros2_driver realsense.launch.py depth_profile:=424x240x60 color_profile:=424x240x60
+ros2 launch racecar_neo_ros2_driver realsense.launch.py depth_profile:=424x240x60 color_profile:=424x240x60
 ```
 
 ### Depth Filters
@@ -147,7 +149,7 @@ Disabling filters will increase the depth framerate on the Pi 5 (~19 Hz with fil
 
 ### Pi 5 Performance Considerations
 
-- With the default UAV Neo config (depth + color + IMU + filters at 15 FPS, no IR or alignment), expect **~10-15 Hz** for depth/color publish rate under full teleop load (MAVROS + Arducam running)
+- With the default config (depth + color + IMU + filters at 15 FPS, no IR or alignment), expect **~10-15 Hz** for depth/color publish rate under full teleop load
 - **Infrared streams**, **aligned depth**, and **point cloud** are all disabled by default to minimize CPU load
 - Enabling IR + alignment + all streams significantly increases CPU usage
 - If CPU usage is too high, reduce to 424x240 or lower FPS
@@ -178,9 +180,9 @@ sudo rs-fw-update -f /tmp/d400_fw/D4XX_FW_Image-5.17.0.9.bin
 
 The D435i IMU uses Linux HID-sensor IIO devices. On the Pi 5, the sysfs attributes for these devices default to root-only, causing `Permission denied` errors when the RealSense node tries to configure the gyroscope and accelerometer.
 
-The UAV Neo launch file (`realsense.launch.py`) automatically runs a permission fix script before starting the camera node. A udev rule (`/etc/udev/rules.d/99-realsense-imu.rules`) also attempts to fix permissions on device creation.
+The `realsense.launch.py` launch file automatically runs a permission fix script before starting the camera node. A udev rule (`/etc/udev/rules.d/99-realsense-imu.rules`) also attempts to fix permissions on device creation.
 
-If you see IMU permission errors when launching manually (not through the UAV Neo launch file), run:
+If you see IMU permission errors when launching manually (not through `realsense.launch.py`), run:
 
 ```bash
 sudo /usr/local/bin/fix-realsense-imu.sh

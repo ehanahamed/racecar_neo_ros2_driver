@@ -31,7 +31,6 @@ PACKAGE = 'racecar_neo_ros2_driver'
 # Executable-path substrings used by process_check. Specific enough to
 # distinguish the node binary from `ros2 launch` wrappers in pgrep -f.
 DRIVER_LIB = '/install/racecar_neo_ros2_driver/lib/racecar_neo_ros2_driver'
-GSCAM_LIB = '/install/gscam/lib/gscam/gscam_node'
 SLLIDAR_LIB = '/install/sllidar_ros2/lib/sllidar_ros2/sllidar_node'
 # RealSense ships from /opt/ros/jazzy (apt package), not the workspace install tree.
 REALSENSE_EXECUTABLE_PATH = '/realsense2_camera/realsense2_camera_node'
@@ -81,6 +80,7 @@ def _i2c_probe(bus: int, addr: int) -> bool:
             b.close()
     except Exception:  # noqa: BLE001
         return False
+
 
 def _usb_device_present(usb_id: str) -> bool:
     """Check whether a USB vendor:product ID appears in lsusb output."""
@@ -151,26 +151,8 @@ NODES = {
         # 5s is well above the 10 Hz scan period and well below restart cooldown.
         'freshness_sec': 5.0,
     },
-    'camera_forward': {
-        'topic': '/camera/forward',
-        'launch': 'camera_forward.launch.py',
-        'device_check': lambda: os.path.exists('/dev/cam_forward'),
-        'device_label': '/dev/cam_forward (Logitech BRIO)',
-        # Both cameras run the same gscam_node binary; disambiguate by argv.
-        'kill_pattern': 'gscam_node.*__node:=camera_forward',
-        'process_check': _is_running('gscam_node.*__node:=camera_forward'),
-    },
-    'camera_backward': {
-        'topic': '/camera/backward',
-        'launch': 'camera_backward.launch.py',
-        'device_check': lambda: os.path.exists('/dev/cam_backward'),
-        'device_label': '/dev/cam_backward (Arducam B0578)',
-        'kill_pattern': 'gscam_node.*__node:=camera_backward',
-        'process_check': _is_running('gscam_node.*__node:=camera_backward'),
-        'restart_delay': 5,  # USB bus settle
-    },
     'realsense': {
-        'topic': '/camera/color/image_raw',
+        'topic': '/camera/forward',
         'launch': 'realsense.launch.py',
         'device_check': lambda: _usb_device_present('8086:0b3a'),
         'device_label': 'USB 8086:0b3a (RealSense D435i)',

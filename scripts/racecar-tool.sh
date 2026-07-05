@@ -445,7 +445,7 @@ __RC_CLEANUP_HELP__
 
             # ----- Process inventory -----
             # Match any process whose cmdline mentions the racecar stack.
-            local pattern='racecar_neo_ros2_driver|gscam_node|sllidar_node|ros2 launch racecar|sg dialout.*racecar'
+            local pattern='racecar_neo_ros2_driver|realsense2_camera_node|sllidar_node|ros2 launch racecar|sg dialout.*racecar'
             local matches
             matches=$(ps -eo pid,user,cmd --no-headers | grep -E "$pattern" | grep -v 'grep\|racecar cleanup' || true)
 
@@ -556,10 +556,10 @@ __RC_SELFTEST_HELP__
 
         status)
             echo "=== USB peripherals ==="
-            lsusb | grep -iE "pololu|silicon labs|logitech|microdia|arducam|global unichip|google" || echo "  (none of the expected USB devices found)"
+            lsusb | grep -iE "pololu|silicon labs|intel|global unichip|google" || echo "  (none of the expected USB devices found)"
             echo
             echo "=== Stable device symlinks ==="
-            for s in maestro lidar cam_forward cam_backward; do
+            for s in maestro lidar; do
                 if [[ -e "/dev/$s" ]]; then
                     printf "  /dev/%-14s -> %s\n" "$s" "$(readlink -f /dev/$s)"
                 else
@@ -592,7 +592,7 @@ Commands:
                         Forwards args, e.g. `racecar teleop edgetpu_enable:=false`.
     launch <name>       Shortcut for `ros2 launch racecar_neo_ros2_driver <name>.launch.py`.
                         Examples: racecar launch dotmatrix
-                                  racecar launch camera_forward
+                                  racecar launch realsense
                                   racecar launch edgetpu
     clear --dmatrix     Flash + clear the MAX7219 dot matrix display.
     udev                Re-install the udev rules (refreshes /dev/maestro etc.).

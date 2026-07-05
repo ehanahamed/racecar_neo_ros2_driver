@@ -188,61 +188,6 @@ class TestLSM9DS1:
 
 
 # ---------------------------------------------------------------------------
-# Forward camera — Logitech BRIO over V4L2
-# ---------------------------------------------------------------------------
-
-@pytest.mark.hardware
-class TestForwardCamera:
-    DEVICE = '/dev/cam_forward'
-    BRIO_USB_ID = '046d:085e'
-
-    def test_device_symlink_exists(self):
-        assert os.path.exists(self.DEVICE), (
-            f'{self.DEVICE} symlink not present. Run `bash scripts/setup_udev.sh` '
-            f'and unplug+replug the BRIO. Check `lsusb | grep -i logitech`.'
-        )
-
-    def test_brio_enumerated(self):
-        assert _lsusb_match(self.BRIO_USB_ID), (
-            f'Logitech BRIO (USB {self.BRIO_USB_ID}) not detected.'
-        )
-
-    def test_v4l2_device_enumerated(self):
-        try:
-            out = subprocess.run(
-                ['v4l2-ctl', '--list-devices'],
-                capture_output=True, text=True, timeout=5,
-            ).stdout
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pytest.fail('v4l2-ctl missing — `sudo apt install v4l-utils`.')
-        assert '/dev/video' in out, (
-            'No V4L2 video devices enumerated. Plug in the forward camera; '
-            'check `lsusb | grep -i logitech`.'
-        )
-
-
-# ---------------------------------------------------------------------------
-# Backward camera — Arducam B0578
-# ---------------------------------------------------------------------------
-
-@pytest.mark.hardware
-class TestArducam:
-    DEVICE = '/dev/cam_backward'
-    USB_ID = '0c45:0578'
-
-    def test_device_symlink_exists(self):
-        assert os.path.exists(self.DEVICE), (
-            f'{self.DEVICE} symlink not present. Run `bash scripts/setup_udev.sh` '
-            f'and unplug+replug the Arducam.'
-        )
-
-    def test_usb_present(self):
-        assert _lsusb_match(self.USB_ID), (
-            f'Arducam B0578 (USB {self.USB_ID}) not detected. Check the '
-            f'rear camera USB cable.'
-        )
-
-# ---------------------------------------------------------------------------
 # RealSense D435i
 # ---------------------------------------------------------------------------
 
