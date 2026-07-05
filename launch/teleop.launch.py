@@ -1,7 +1,9 @@
 """
 Full-stack teleop launch: control + sensors + ML + display.
 
-Control pipeline (gamepad/mux/throttle/pwm + joy_node) is always brought up.
+Control pipeline (gamepad/mux/throttle/pit + joy_node) is always brought up.
+pit_node owns the Teensy UART: it drives the servo/ESC and republishes the
+LSM9DS1 as /imu + /mag, so there is no separate imu subsystem here.
 Each sensor/ML/display subsystem can be disabled via a name_enable arg
 (default 'true') -- for instance, edgetpu_enable:=false skips the Coral.
 EdgeTPU is delayed 10s so Coral USB firmware enumerates before
@@ -21,7 +23,7 @@ from launch_ros.actions import Node
 
 
 _SUBSYSTEMS = (
-    'imu', 'lidar', 'camera_forward', 'camera_backward', 'edgetpu', 'dotmatrix',
+    'lidar', 'camera_forward', 'camera_backward', 'edgetpu', 'dotmatrix',
 )
 
 
@@ -49,8 +51,8 @@ def generate_launch_description():
         'mux_config', default_value=os.path.join(config_dir, 'mux.yaml'))
     throttle_cfg_arg = DeclareLaunchArgument(
         'throttle_config', default_value=os.path.join(config_dir, 'throttle.yaml'))
-    pwm_cfg_arg = DeclareLaunchArgument(
-        'pwm_config', default_value=os.path.join(config_dir, 'pwm.yaml'))
+    pit_cfg_arg = DeclareLaunchArgument(
+        'pit_config', default_value=os.path.join(config_dir, 'pit.yaml'))
 
     # Per-subsystem enable flags
     enable_args = [
@@ -82,9 +84,9 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(os.path.join(launch_dir, 'throttle.launch.py')),
         launch_arguments={'throttle_config': LaunchConfiguration('throttle_config')}.items(),
     )
-    pwm = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(launch_dir, 'pwm.launch.py')),
-        launch_arguments={'pwm_config': LaunchConfiguration('pwm_config')}.items(),
+    pit = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, 'pit.launch.py')),
+        launch_arguments={'pit_config': LaunchConfiguration('pit_config')}.items(),
     )
 
     def _gated_include(name: str, delay: float = 0.0):
@@ -98,7 +100,6 @@ def generate_launch_description():
                 EqualsSubstitution(LaunchConfiguration(f'{name}_enable'), 'true')),
         )
 
-    imu_launch = _gated_include('imu')
     lidar_launch = _gated_include('lidar')
     camera_forward_launch = _gated_include('camera_forward')
     # Backward camera delayed 5s — gives the forward camera time to grab its
@@ -111,10 +112,10 @@ def generate_launch_description():
 
     return LaunchDescription([
         joy_device_arg, joy_deadzone_arg, joy_autorepeat_arg,
-        gamepad_cfg_arg, mux_cfg_arg, throttle_cfg_arg, pwm_cfg_arg,
+        gamepad_cfg_arg, mux_cfg_arg, throttle_cfg_arg, pit_cfg_arg,
         *enable_args,
-        joy, gamepad, mux, throttle, pwm,
-        imu_launch, lidar_launch,
+        joy, gamepad, mux, throttle, pit,
+        lidar_launch,
         camera_forward_launch, camera_backward_launch,
         edgetpu_launch, dotmatrix_launch,
     ])

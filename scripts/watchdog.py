@@ -83,13 +83,13 @@ def _i2c_probe(bus: int, addr: int) -> bool:
 
 NODES = {
     # ----- Control pipeline (safety-critical) -----
-    'pwm': {
-        'topic': '/motor',
-        'launch': 'pwm.launch.py',
-        'device_check': lambda: os.path.exists('/dev/maestro'),
-        'device_label': '/dev/maestro (Pololu Maestro)',
-        'kill_pattern': f'{DRIVER_LIB}/pwm_node',
-        'process_check': _is_running(f'{DRIVER_LIB}/pwm_node'),
+    'pit': {
+        'topic': '/imu',  # pit_node's steady telemetry output proves the UART link
+        'launch': 'pit.launch.py',
+        'device_check': lambda: os.path.exists('/dev/serial0'),
+        'device_label': '/dev/serial0 (Teensy PIT UART)',
+        'kill_pattern': f'{DRIVER_LIB}/pit_node',
+        'process_check': _is_running(f'{DRIVER_LIB}/pit_node'),
     },
     'throttle': {
         'topic': '/motor',  # downstream of throttle, alive iff throttle alive
@@ -117,16 +117,8 @@ NODES = {
     },
 
     # ----- Sensors -----
-    'imu': {
-        'topic': '/imu',
-        'launch': 'imu.launch.py',
-        'device_check': lambda: (
-            os.path.exists('/dev/i2c-1') and _i2c_probe(1, 0x6B)
-        ),
-        'device_label': 'LSM9DS1 @ I2C bus 1 addr 0x6B',
-        'kill_pattern': f'{DRIVER_LIB}/imu_node',
-        'process_check': _is_running(f'{DRIVER_LIB}/imu_node'),
-    },
+    # IMU (/imu, /mag) is now published by pit_node from Teensy telemetry, so it
+    # is supervised by the 'pit' entry above rather than a standalone imu_node.
     'lidar': {
         'topic': '/scan',
         'launch': 'lidar.launch.py',

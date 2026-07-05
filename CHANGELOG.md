@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Driver-side migration to the NEO-PIT drive controller (Teensy 4.1 PCB, repo `neo-pit-pcb` / firmware `racecar-pit-firmware`), which replaces the Pololu Maestro and moves the LSM9DS1 IMU, INA226 power sensor, and hall encoder onto the board. The Pi now speaks a binary UART protocol to the Teensy instead of driving the Maestro over USB and reading the IMU over I2C. Command semantics are unchanged: `/drive` stays normalized `[-1, 1]`, mapped to servo/ESC PWM on the Teensy (open-loop passthrough).
+
+This lands the Pi side only. The car does not move and `/imu` reads zero until `racecar-pit-firmware` is completed (see Notes).
+
+### Added
+
+- **`pit_node`** (`racecar_neo_ros2_driver/pit_node.py`) owns the Pi/Teensy UART on `/dev/serial0`. Subscribes `/motor` and streams command frames at 60 Hz (normalized `[-1, 1]`, per-axis `steering_sign`/`speed_sign`, neutral on a stale command past `command_timeout_sec`); reads telemetry and republishes the LSM9DS1 as `/imu` + `/mag`, preserving the topics and units the old `imu_node` provided. Battery/current, encoder, and RC channels are decoded but not yet published. Reconnects on device loss; sends neutral on shutdown.
+- **`pit_protocol`** (`racecar_neo_ros2_driver/pit_protocol.py`) encodes and decodes the wire format from firmware `packets.h` (little-endian, packed): telemetry 94 B magic `0xDEADBEEF`, command 4 B magic `0xBEEFDEAD` + 470 B body, CRC-16/CCITT-FALSE. Pure functions, no ROS or serial dependencies.
+- **`config/pit.yaml`**, **`launch/pit.launch.py`** (watchdog restart target).
+- **Tests**: `test/test_pit_protocol.py` (17) and `test/test_pit_node.py` (10) cover byte layout, CRC, framing and resync, and the IMU transforms.
+
+### Changed
+
+- **`teleop.launch.py`**: `pit` replaces `pwm` in the always-on control pipeline; the standalone `imu` subsystem is removed (the IMU now arrives via `pit_node` telemetry).
+- **`watchdog.py` / `dashboard.py`**: supervise and monitor `pit` (`/dev/serial0`) in place of `pwm` (`/dev/maestro`) and the standalone `imu` node.
+
+### Notes
+
+- **Firmware dependency.** The current `racecar-pit-firmware` `main.cpp` decodes the Pi command but never actuates it, and leaves IMU, power, timestamp, and CRC unfilled in the telemetry packet. Until it is completed, `pit_node` runs correctly but the car does not respond to `/drive` and `/imu` publishes zeros. `require_crc` defaults `false` for the same reason.
+- **IMU calibration unverified.** `pit.yaml` `imu.*_axis_order/sign` and `gyro_scale`/`mag_scale` default to pass-through and must be checked against the LSM9DS1 mounting on the PCB and the units the firmware's Adafruit driver emits.
+- **Legacy path retained, not retired.** `pwm_node`, `maestro.py`, `imu_node`, their launch files, and `config/pwm.yaml` remain installed but are out of the teleop graph. `test_hardware::TestMaestro`, `test_setup_scripts`, and the `/dev/maestro` udev rule still assert the old hardware and will fail on a PIT-equipped car until retired.
+
 ## [0.1.0] — 2026-05-13
 
 QoL: give the `racecar` tool authority over which `~/jupyter_ws/<folder>/library/` is on Python's `sys.path`, so student scripts (e.g. `labs/demo.py`) can `import racecar_core` without a manually-placed `.pth` or `sys.path` hack. Matches the sim installer's existing convention (a `racecar_student.pth` in site-packages) but anchored to user site-packages since the Pi has no venv.
