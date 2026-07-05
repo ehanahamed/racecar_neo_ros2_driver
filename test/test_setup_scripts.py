@@ -33,6 +33,7 @@ ORCHESTRATOR = 'setup_all.sh'
 # side-effects are too disruptive to include in a one-shot install.
 STANDALONE_SCRIPTS = [
     'setup_networking.sh',  # reconfigures wlan0; can drop SSH-over-WiFi sessions
+    'flash_realsense_offline.sh',  # per-machine camera firmware flash (airgapped)
 ]
 
 ALL_SCRIPTS = PHASE_SCRIPTS + [ORCHESTRATOR] + STANDALONE_SCRIPTS

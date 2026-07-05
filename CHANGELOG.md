@@ -26,6 +26,23 @@ This lands the Pi side only. The car does not move and `/imu` reads zero until `
 - **IMU calibration unverified.** `pit.yaml` `imu.*_axis_order/sign` and `gyro_scale`/`mag_scale` default to pass-through and must be checked against the LSM9DS1 mounting on the PCB and the units the firmware's Adafruit driver emits.
 - **Legacy path retained, not retired.** `pwm_node`, `maestro.py`, `imu_node`, their launch files, and `config/pwm.yaml` remain installed but are out of the teleop graph. `test_hardware::TestMaestro`, `test_setup_scripts`, and the `/dev/maestro` udev rule still assert the old hardware and will fail on a PIT-equipped car until retired.
 
+## [0.2.2] - 2026-07-05
+
+Offline Intel RealSense D435i firmware flashing for airgapped fleet units. The D435i IMU needs firmware >= 5.17.0.9 to stream on the Pi 5's xHCI USB controller (older firmware dies with `Motion Module force pause`); camera firmware lives in the camera's own flash, not on the disk, so cloning the golden image neither carries the update to another camera nor breaks an already-updated one. Each unit must be flashed individually, and airgapped units cannot fetch the image at flash time.
+
+### Added
+
+- **`scripts/flash_realsense_offline.sh`** and **`racecar setup realsense`** flash the D435i from a locally-staged image with no network access. The `.bin` (default `/opt/racecar/firmware/D4XX_FW_Image-<version>.bin`, staged once into the golden image before cloning) and `rs-fw-update` both travel in the clone; the tool reads the local `.bin` and pushes it over USB. Idempotent (a camera already at the target `5.17.0.9` is a no-op), reports current-vs-target with `--check`, targets one camera by `--serial` when several are attached, falls back to DFU recovery mode on a failed normal-mode flash, and re-verifies the version afterward. Target version and staging dir override via `--version`/`--fw-dir` or `RACECAR_RS_FW_VERSION`/`RACECAR_RS_FW_DIR`.
+- **Tests**: `flash_realsense_offline.sh` added to the standalone-script sanity set (`test_setup_scripts.py`); two `racecar setup realsense` dispatch tests in `test_racecar_tool.py`.
+
+### Changed
+
+- **`docs/realsense_topics.md`**: added the airgapped fleet-flash procedure and corrected the `rs-fw-update` library-path note. `sudo` strips `LD_*` from the environment even with `-E`, so the ROS-packaged binary needs `LD_LIBRARY_PATH` passed explicitly via `sudo env`; enumeration and post-flash verify run as the invoking user (the normal `0b3a` device is reachable via the `video`/`plugdev` groups) and only the flash itself uses `sudo`.
+
+### Notes
+
+- Verified on-robot: flashed unit serial 943222070134 from 5.11.1.100 to 5.17.0.9, then brought the camera up and confirmed depth, color, and IMU all publish. The IMU (`/camera/camera/accel|gyro|imu`) streams real data post-flash (accel reads the gravity vector, ~9.1 m/s2) where the old firmware published nothing. A transient `Motion Module failure / HID set_power` warning still fires once at init on the Pi 5 xHCI combo but does not stop the stream.
+
 ## [0.2.1] - 2026-07-05
 
 Refines the RealSense integration: the color stream moves to `/camera/color`, depth is exposed on `/camera/depth` as a working API, and the RealSense IMU feeds a fusion node so the Teensy LSM9DS1 can join later.

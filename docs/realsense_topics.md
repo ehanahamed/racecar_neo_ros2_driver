@@ -174,7 +174,30 @@ sudo rs-fw-update -f /tmp/d400_fw/D4XX_FW_Image-5.17.0.9.bin
 # If camera enters DFU mode and access fails, use: sudo rs-fw-update -r -f <path>
 ```
 
-> **Note:** `rs-fw-update` needs `sudo` because the DFU-mode USB device (`8086:0adb`) requires root access. If using the ROS-packaged binary, pass `LD_LIBRARY_PATH` explicitly.
+> **Note:** `rs-fw-update` needs `sudo` because the DFU-mode USB device (`8086:0adb`) requires root access. The ROS-packaged binary also needs its libs on the path, and `sudo` strips `LD_*` from the environment even with `-E` — pass it explicitly: `sudo env LD_LIBRARY_PATH=/opt/ros/jazzy/lib rs-fw-update ...`.
+
+### Airgapped fleet firmware flash
+
+Camera firmware lives in the camera's own flash, not on the disk. Cloning the OS image neither carries firmware to another camera nor breaks an already-updated one, so each unit must be flashed individually. `rs-fw-update` never needs the network; only downloading the `.bin` does.
+
+Stage the firmware into the golden image **once** on a networked machine, before cloning:
+
+```bash
+sudo mkdir -p /opt/racecar/firmware
+wget -O /tmp/d400_fw.zip "https://realsenseai.com/wp-content/uploads/2025/07/d400_series_production_fw_5_17_0_9-4.zip"
+unzip /tmp/d400_fw.zip -d /tmp/d400_fw
+sudo cp /tmp/d400_fw/D4XX_FW_Image-5.17.0.9.bin /opt/racecar/firmware/
+```
+
+Then on each airgapped car (the `.bin` and `rs-fw-update` both came along in the clone):
+
+```bash
+racecar setup realsense            # flash from /opt/racecar/firmware; skips if already 5.17.0.9
+racecar setup realsense --check    # report current vs target only, no flash
+racecar setup realsense --serial 943222070134   # pick one when several cameras are attached
+```
+
+`racecar setup realsense` runs `scripts/flash_realsense_offline.sh`. It is idempotent (a camera already at the target version is a no-op), falls back to DFU recovery mode on a failed normal-mode flash, and re-verifies the version afterward. Override the target with `--version` / `RACECAR_RS_FW_VERSION` or the staging directory with `--fw-dir` / `RACECAR_RS_FW_DIR`.
 
 ### IMU IIO Permissions (Raspberry Pi 5)
 

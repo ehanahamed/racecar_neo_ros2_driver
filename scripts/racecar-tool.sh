@@ -159,11 +159,17 @@ __RC_SVC_HELP__
             case "$phase" in
                 "")
                     echo "usage: racecar setup <phase>" >&2
-                    echo "  phases: all, networking" >&2
+                    echo "  phases: all, networking, realsense" >&2
                     return 2
                     ;;
                 all)
                     bash "$pkg_dir/scripts/setup_all.sh" "$@"
+                    ;;
+                realsense)
+                    # Offline per-machine firmware flash for airgapped fleet units.
+                    # Reads the staged .bin from /opt/racecar/firmware (no network);
+                    # idempotent, skips a camera already at the target version.
+                    bash "$pkg_dir/scripts/flash_realsense_offline.sh" "$@"
                     ;;
                 networking)
                     # Persist any --flag values to ~/.config/racecar/networking.env
@@ -268,7 +274,7 @@ __RC_NET_HELP__
                     ;;
                 *)
                     echo "racecar setup: unknown phase '$phase'" >&2
-                    echo "  phases: all, networking" >&2
+                    echo "  phases: all, networking, realsense" >&2
                     return 2
                     ;;
             esac
@@ -607,6 +613,11 @@ Commands:
                                            --ap-addr=CIDR (default 10.42.0.1/24)
                                            --eth-static=CIDR (default 192.168.52.200/24)
                                            --show / --reset
+                          realsense    — flash D435i firmware from the locally-staged
+                                         image (offline; for airgapped units). Reads
+                                         /opt/racecar/firmware; idempotent. Flags:
+                                           --check (report only)  --force
+                                           --version X.Y.Z.W  --serial SN  --fw-dir DIR
     service <action>    systemd service control. Actions:
                           install              setup_services.sh (drop + enable units)
                           start [name]         default: teleop (watchdog follows)
@@ -701,9 +712,11 @@ _racecar_complete() {
             ;;
         setup)
             if [[ $COMP_CWORD -eq 2 ]]; then
-                COMPREPLY=( $(compgen -W "all networking" -- "$cur") )
+                COMPREPLY=( $(compgen -W "all networking realsense" -- "$cur") )
             elif [[ "${COMP_WORDS[2]}" == "networking" ]]; then
                 COMPREPLY=( $(compgen -W "--ssid= --psk= --channel= --ap-addr= --eth-static= --show --reset --help" -- "$cur") )
+            elif [[ "${COMP_WORDS[2]}" == "realsense" ]]; then
+                COMPREPLY=( $(compgen -W "--check --force --version --serial --fw-dir --help" -- "$cur") )
             fi
             ;;
         service)
