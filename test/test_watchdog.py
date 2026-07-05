@@ -40,7 +40,7 @@ class TestNodesDict:
 
     EXPECTED_NAMES = {
         'pwm', 'throttle', 'mux', 'gamepad',
-        'imu', 'lidar', 'realsense',
+        'imu_fusion', 'lidar', 'realsense',
     }
     REQUIRED_KEYS = {'topic', 'launch', 'device_check', 'device_label',
                      'kill_pattern', 'process_check'}
@@ -83,8 +83,8 @@ class TestNodesDict:
         assert isinstance(result, bool)
 
     def test_realsense_topic(self, watchdog):
-        # RealSense color is remapped onto /camera/forward (the only camera).
-        assert watchdog.NODES['realsense']['topic'] == '/camera/forward'
+        # RealSense color is remapped onto /camera/color (the only camera).
+        assert watchdog.NODES['realsense']['topic'] == '/camera/color'
 
     def test_lidar_has_freshness_threshold(self, watchdog):
         # sllidar can silently desync from the CP2102 (the SDK swallows

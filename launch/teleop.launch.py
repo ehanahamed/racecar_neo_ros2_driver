@@ -20,7 +20,7 @@ from launch_ros.actions import Node
 
 
 _SUBSYSTEMS = (
-    'imu', 'lidar', 'realsense', 'edgetpu', 'dotmatrix',
+    'imu_fusion', 'lidar', 'realsense', 'edgetpu', 'dotmatrix',
 )
 
 
@@ -97,7 +97,7 @@ def generate_launch_description():
                 EqualsSubstitution(LaunchConfiguration(f'{name}_enable'), 'true')),
         )
 
-    imu_launch = _gated_include('imu')
+    imu_fusion_launch = _gated_include('imu_fusion')
     lidar_launch = _gated_include('lidar')
     # RealSense D435i is the forward camera; its color stream is remapped to
     # /camera/forward in realsense.launch.py, with depth on
@@ -113,7 +113,7 @@ def generate_launch_description():
         gamepad_cfg_arg, mux_cfg_arg, throttle_cfg_arg, pwm_cfg_arg,
         *enable_args,
         joy, gamepad, mux, throttle, pwm,
-        imu_launch, lidar_launch,
+        imu_fusion_launch, lidar_launch,
         realsense_launch,
         edgetpu_launch, dotmatrix_launch,
     ])

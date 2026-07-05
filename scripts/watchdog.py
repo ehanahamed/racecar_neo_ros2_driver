@@ -129,15 +129,13 @@ NODES = {
     },
 
     # ----- Sensors -----
-    'imu': {
-        'topic': '/imu',
-        'launch': 'imu.launch.py',
-        'device_check': lambda: (
-            os.path.exists('/dev/i2c-1') and _i2c_probe(1, 0x6B)
-        ),
-        'device_label': 'LSM9DS1 @ I2C bus 1 addr 0x6B',
-        'kill_pattern': f'{DRIVER_LIB}/imu_node',
-        'process_check': _is_running(f'{DRIVER_LIB}/imu_node'),
+    'imu_fusion': {
+        'topic': '/imu/fused',
+        'launch': 'imu_fusion.launch.py',
+        'device_check': lambda: True,  # software node; merges the live IMU sources
+        'device_label': 'imu_fusion_node (software)',
+        'kill_pattern': f'{DRIVER_LIB}/imu_fusion_node',
+        'process_check': _is_running(f'{DRIVER_LIB}/imu_fusion_node'),
     },
     'lidar': {
         'topic': '/scan',
@@ -152,7 +150,7 @@ NODES = {
         'freshness_sec': 5.0,
     },
     'realsense': {
-        'topic': '/camera/forward',
+        'topic': '/camera/color',
         'launch': 'realsense.launch.py',
         'device_check': lambda: _usb_device_present('8086:0b3a'),
         'device_label': 'USB 8086:0b3a (RealSense D435i)',

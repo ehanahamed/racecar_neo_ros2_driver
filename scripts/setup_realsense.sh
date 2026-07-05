@@ -32,6 +32,12 @@ for dev in /sys/bus/iio/devices/iio:device*; do
     chmod 666 "$dev"/in_*_hysteresis 2>/dev/null
     [ -e /dev/"$(basename "$dev")" ] && chmod 666 /dev/"$(basename "$dev")"
 done
+# The motion module's accelerometer needs enable_sensor writable too; it lives
+# at the HID-SENSOR-*.auto node, not under iio:device*. Without this the accel
+# fails with "Failed to enable_sensor ... Permission denied" and reads zeros.
+for f in $(find /sys/devices -path '*HID-SENSOR*' -name enable_sensor 2>/dev/null); do
+    chmod 666 "$f" 2>/dev/null
+done
 FIXSCRIPT
 sudo chmod +x /usr/local/bin/fix-realsense-imu.sh
 echo "  Created /usr/local/bin/fix-realsense-imu.sh"

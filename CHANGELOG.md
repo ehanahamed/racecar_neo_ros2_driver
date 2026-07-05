@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-07-05
+
+Refines the RealSense integration: the color stream moves to `/camera/color`, depth is exposed on `/camera/depth` as a working API, and the RealSense IMU feeds a fusion node so the Teensy LSM9DS1 can join later.
+
+### Added
+
+- `imu_fusion_node` (with `launch/imu_fusion.launch.py` and `config/imu_fusion.yaml`) merges `/imu/realsense` and `/imu/lsm9ds1` into `/imu/fused`, averaging when both are fresh and passing the single source through otherwise. The RealSense IMU is remapped from `/camera/imu` to `/imu/realsense`.
+
+### Changed
+
+- Color is remapped to `/camera/color` and depth to `/camera/depth` (was `/camera/forward` and the RealSense depth default); decimation is disabled so depth stays 640x480. `edgetpu.yaml`, `watchdog.py`, and `dashboard.py` follow the new topics, and `teleop.launch.py` runs `imu_fusion` in place of the standalone `imu`.
+
+### Fixed
+
+- `setup_realsense.sh` now chmods the motion module's `enable_sensor` at the HID-sensor node, not just the `iio:device*` attributes. Without it the accelerometer failed with "Failed to enable_sensor ... Permission denied", read zeros, and crashed the camera node.
+
 ## [0.2.0] - 2026-07-05
 
 Camera subsystem moves to an Intel RealSense D435i as the single forward camera, retiring the Logitech BRIO / Arducam gscam hybrid. The RealSense color stream is published on `/camera/forward`, the topic `edgetpu_node` and the student library (`camera_real.py`) already read, so the forward-camera contract is unchanged while the physical source and the depth/IMU streams are new.

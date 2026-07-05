@@ -1,4 +1,4 @@
-"""Intel RealSense D435i as the RACECAR Neo v2 forward camera."""
+"""Intel RealSense D435i as the RACECAR Neo v2 camera (color + depth + IMU)."""
 
 import os
 
@@ -83,8 +83,9 @@ def generate_launch_description():
                     'enable_sync': 'true',
                     'align_depth.enable':
                         LaunchConfiguration('align_depth_enable'),
-                    # Filters
-                    'decimation_filter.enable': 'true',
+                    # Filters. Decimation off so depth stays 640x480 (matches
+                    # the color frame and the library's depth API shape).
+                    'decimation_filter.enable': 'false',
                     'spatial_filter.enable': 'true',
                     'temporal_filter.enable': 'true',
                     # Point cloud
@@ -106,12 +107,13 @@ def generate_launch_description():
         depth_profile_arg,
         color_profile_arg,
         fix_imu_permissions,
-        # Publish the color stream as /camera/forward, the forward-camera topic
-        # edgetpu_node and the student library (camera_real.py) already read, so
-        # replacing the Logitech BRIO with the RealSense needs no downstream
-        # change. SetRemap applies to the node inside the included rs_launch.
-        # VERIFY on the Pi that this propagates; if not, fall back to a
-        # topic relay or a direct realsense2_camera_node with remappings.
-        SetRemap(src='/camera/color/image_raw', dst='/camera/forward'),
+        # Republish the RealSense streams onto the RACECAR topic names the
+        # student library and edgetpu_node read: color -> /camera/color,
+        # depth -> /camera/depth, and the combined IMU -> /imu/realsense
+        # (imu_fusion_node merges it with the Teensy LSM9DS1 into /imu/fused).
+        # SetRemap applies to the node inside the included rs_launch.
+        SetRemap(src='/camera/color/image_raw', dst='/camera/color'),
+        SetRemap(src='/camera/depth/image_rect_raw', dst='/camera/depth'),
+        SetRemap(src='/camera/imu', dst='/imu/realsense'),
         realsense_launch,
     ])

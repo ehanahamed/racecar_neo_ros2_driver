@@ -6,7 +6,7 @@ package_name = 'racecar_neo_ros2_driver'
 
 setup(
     name=package_name,
-    version='0.2.0',
+    version='0.2.1',
     packages=find_packages(exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages',
@@ -36,6 +36,7 @@ setup(
             'edgetpu_node = racecar_neo_ros2_driver.edgetpu_node:main',
             'gamepad_node = racecar_neo_ros2_driver.gamepad_node:main',
             'imu_node = racecar_neo_ros2_driver.imu_node:main',
+            'imu_fusion_node = racecar_neo_ros2_driver.imu_fusion_node:main',
             'mux_node = racecar_neo_ros2_driver.mux_node:main',
             'throttle_node = racecar_neo_ros2_driver.throttle_node:main',
             'pwm_node = racecar_neo_ros2_driver.pwm_node:main',
