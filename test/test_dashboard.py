@@ -38,8 +38,8 @@ def test_py_compile_clean():
 
 class TestMonitoredAndRateTopics:
     EXPECTED_NODES = {
-        'pwm', 'throttle', 'mux', 'gamepad',
-        'imu', 'lidar', 'camera_forward', 'camera_backward',
+        'pit', 'throttle', 'mux', 'gamepad',
+        'imu_fusion', 'lidar', 'realsense',
         'edgetpu', 'dotmatrix',
     }
 
@@ -57,9 +57,14 @@ class TestMonitoredAndRateTopics:
 
     def test_rate_topics_subset_of_known_publishers(self, dashboard):
         # Every rate-monitored topic should belong to a node we know about.
+        # The RealSense card is /camera/color, but it also feeds rate-monitored
+        # depth (/camera/depth) and its IMU source (/imu/realsense), so allow
+        # those alongside the MONITORED card topics.
         all_topics = {cfg['topic'] for cfg in dashboard.MONITORED.values()}
+        realsense_extra = {'/camera/depth', '/imu/realsense'}
+        known = all_topics | realsense_extra
         for t in dashboard.RATE_TOPICS:
-            assert t in all_topics, f'{t} in RATE_TOPICS but no MONITORED node publishes it'
+            assert t in known, f'{t} in RATE_TOPICS but no known node publishes it'
 
 
 class TestGetStatus:

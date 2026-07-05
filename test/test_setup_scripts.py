@@ -21,7 +21,7 @@ PHASE_SCRIPTS = [
     'setup_udev.sh',
     'setup_dotmatrix.sh',
     'setup_coral.sh',
-    'patch_gscam.sh',
+    'setup_realsense.sh',
     'setup_workspace.sh',
     'setup_jupyter.sh',
     'setup_services.sh',
@@ -251,7 +251,7 @@ class TestUdevRules:
         assert self.RULES_FILE.is_file(), f'{self.RULES_FILE} missing'
 
     @pytest.mark.parametrize('symlink', [
-        'maestro', 'lidar', 'cam_forward', 'cam_backward',
+        'maestro', 'lidar',
     ])
     def test_rules_define_symlink(self, symlink):
         text = self.RULES_FILE.read_text()
@@ -261,8 +261,6 @@ class TestUdevRules:
 
     @pytest.mark.parametrize('vid_pid', [
         ('10c4', 'ea60'),  # CP2102 (RPLIDAR)
-        ('046d', '085e'),  # Logitech BRIO
-        ('0c45', '0578'),  # Arducam B0578
         ('1a6e', '089a'),  # Coral pre-init
         ('18d1', '9302'),  # Coral post-init
     ])
@@ -272,6 +270,13 @@ class TestUdevRules:
         text = self.RULES_FILE.read_text()
         assert f'ATTRS{{idVendor}}=="{vid}"' in text, f'VID {vid} not matched'
         assert f'ATTRS{{idProduct}}=="{pid}"' in text, f'PID {pid} not matched'
+
+    def test_realsense_autosuspend_rule_present(self):
+        # RealSense D435i (USB 8086:0b3a). The autosuspend rule matches the usb
+        # device node directly, so it uses ATTR (singular), not ATTRS.
+        text = self.RULES_FILE.read_text()
+        assert 'ATTR{idVendor}=="8086"' in text, 'RealSense VID not matched'
+        assert 'ATTR{idProduct}=="0b3a"' in text, 'RealSense PID not matched'
 
     def test_lidar_rule_ignores_modemmanager(self):
         # ModemManager will probe any tty unless told otherwise. For the lidar's

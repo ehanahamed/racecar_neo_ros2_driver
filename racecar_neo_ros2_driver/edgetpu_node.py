@@ -47,8 +47,8 @@ def image_msg_to_rgb(msg: Image) -> np.ndarray:
     """
     Decode a sensor_msgs/Image into an (H, W, 3) uint8 RGB array.
 
-    Supports rgb8 / bgr8 encodings only — what gscam publishes after
-    `videoconvert ! appsink caps=video/x-raw,format=RGB|BGR`.
+    Supports rgb8 / bgr8 encodings only; the RealSense color stream on
+    /camera/forward publishes rgb8.
     """
     if msg.encoding not in ('rgb8', 'bgr8'):
         raise ValueError(f'Unsupported image encoding: {msg.encoding}')

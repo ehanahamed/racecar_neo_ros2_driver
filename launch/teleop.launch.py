@@ -2,13 +2,13 @@
 Full-stack teleop launch: control + sensors + ML + display.
 
 Control pipeline (gamepad/mux/throttle/pit + joy_node) is always brought up.
-pit_node owns the Teensy UART: it drives the servo/ESC and republishes the
-LSM9DS1 as /imu + /mag, so there is no separate imu subsystem here.
+pit_node owns the Teensy UART and drives the servo/ESC. imu_fusion merges the
+RealSense and Teensy LSM9DS1 IMUs into /imu/fused; the RealSense D435i is the
+camera.
 Each sensor/ML/display subsystem can be disabled via a name_enable arg
 (default 'true') -- for instance, edgetpu_enable:=false skips the Coral.
 EdgeTPU is delayed 10s so Coral USB firmware enumerates before
-make_interpreter runs; the backward camera is delayed 5s to stagger USB
-bus contention.
+make_interpreter runs.
 """
 
 import os
@@ -23,7 +23,7 @@ from launch_ros.actions import Node
 
 
 _SUBSYSTEMS = (
-    'lidar', 'camera_forward', 'camera_backward', 'edgetpu', 'dotmatrix',
+    'imu_fusion', 'lidar', 'realsense', 'edgetpu', 'dotmatrix',
 )
 
 
@@ -100,11 +100,12 @@ def generate_launch_description():
                 EqualsSubstitution(LaunchConfiguration(f'{name}_enable'), 'true')),
         )
 
+    imu_fusion_launch = _gated_include('imu_fusion')
     lidar_launch = _gated_include('lidar')
-    camera_forward_launch = _gated_include('camera_forward')
-    # Backward camera delayed 5s — gives the forward camera time to grab its
-    # USB bandwidth share before the Arducam starts negotiating.
-    camera_backward_launch = _gated_include('camera_backward', delay=5.0)
+    # RealSense D435i is the camera; realsense.launch.py remaps its color stream
+    # to /camera/color, depth to /camera/depth, and the camera IMU to
+    # /imu/realsense (imu_fusion_node merges it into /imu/fused).
+    realsense_launch = _gated_include('realsense')
     # EdgeTPU delayed 10s — Coral USB firmware enumeration (1a6e:089a →
     # 18d1:9302) needs to complete before make_interpreter runs.
     edgetpu_launch = _gated_include('edgetpu', delay=10.0)
@@ -115,7 +116,7 @@ def generate_launch_description():
         gamepad_cfg_arg, mux_cfg_arg, throttle_cfg_arg, pit_cfg_arg,
         *enable_args,
         joy, gamepad, mux, throttle, pit,
-        lidar_launch,
-        camera_forward_launch, camera_backward_launch,
+        imu_fusion_launch, lidar_launch,
+        realsense_launch,
         edgetpu_launch, dotmatrix_launch,
     ])

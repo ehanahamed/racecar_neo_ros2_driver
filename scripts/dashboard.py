@@ -34,10 +34,10 @@ MONITORED = {
     'throttle': {'topic': '/motor', 'label': 'Throttle (clamping)', 'supervised': True},
     'mux': {'topic': '/mux_out', 'label': 'Mux (arbitrator)', 'supervised': True},
     'gamepad': {'topic': '/gamepad_drive', 'label': 'Gamepad', 'supervised': True},
+    'imu_fusion': {'topic': '/imu/fused', 'label': 'IMU fusion', 'supervised': True},
     'lidar': {'topic': '/scan', 'label': 'RPLIDAR', 'supervised': True},
-    'camera_forward': {'topic': '/camera/forward', 'label': 'BRIO (forward)', 'supervised': True},
-    'camera_backward': {
-        'topic': '/camera/backward', 'label': 'Arducam (backward)', 'supervised': True},
+    'realsense': {
+        'topic': '/camera/color', 'label': 'RealSense D435i', 'supervised': True},
     'edgetpu': {'topic': '/edgetpu/inference', 'label': 'Coral EdgeTPU', 'supervised': False},
     'dotmatrix': {'topic': '/dotmatrix/pixels', 'label': 'Dot matrix', 'supervised': False},
 }
@@ -45,10 +45,11 @@ MONITORED = {
 RATE_TOPICS = [
     '/motor',
     '/mux_out',
-    '/imu',
+    '/imu/fused',
+    '/imu/realsense',
     '/scan',
-    '/camera/forward',
-    '/camera/backward',
+    '/camera/color',
+    '/camera/depth',
     '/edgetpu/inference',
 ]
 

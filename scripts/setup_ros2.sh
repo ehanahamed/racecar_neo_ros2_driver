@@ -23,7 +23,6 @@ sudo apt-get install -y \
     ros-jazzy-joy \
     ros-jazzy-ackermann-msgs \
     ros-jazzy-vision-msgs \
-    ros-jazzy-gscam \
     ros-jazzy-cv-bridge \
     ros-jazzy-image-transport \
     ros-jazzy-image-transport-plugins \
