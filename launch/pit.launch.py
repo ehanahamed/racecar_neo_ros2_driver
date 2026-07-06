@@ -1,4 +1,4 @@
-"""Standalone pit_node launch — owns /dev/serial0 (Teensy UART); watchdog restart target."""
+"""Standalone pit_node launch — owns /dev/neo-pit-pcb (Teensy UART); watchdog restart target."""
 
 from racecar_neo_ros2_driver.launch_common import single_node_launch
 

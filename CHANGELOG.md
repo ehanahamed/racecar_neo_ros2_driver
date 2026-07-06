@@ -10,7 +10,7 @@ This lands the Pi side only. The car does not move and `/imu/lsm9ds1` reads zero
 
 ### Added
 
-- **`pit_node`** (`racecar_neo_ros2_driver/pit_node.py`) owns the Pi/Teensy UART on `/dev/serial0`. Subscribes `/motor` and streams command frames at 60 Hz (normalized `[-1, 1]`, per-axis `steering_sign`/`speed_sign`, neutral on a stale command past `command_timeout_sec`); reads telemetry and republishes the LSM9DS1 as `/imu/lsm9ds1` + `/mag` (both topic names are parameters), which `imu_fusion_node` blends with the RealSense `/imu/realsense` into `/imu/fused`. Battery/current, encoder, and RC channels are decoded but not yet published. Reconnects on device loss; sends neutral on shutdown.
+- **`pit_node`** (`racecar_neo_ros2_driver/pit_node.py`) owns the Pi/Teensy UART on `/dev/neo-pit-pcb` (stable udev symlink to the GPIO UART, `ttyAMA0` on Pi 5 / Ubuntu). Subscribes `/motor` and streams command frames at 60 Hz (normalized `[-1, 1]`, per-axis `steering_sign`/`speed_sign`, neutral on a stale command past `command_timeout_sec`); reads telemetry and republishes the LSM9DS1 as `/imu/lsm9ds1` + `/mag` (both topic names are parameters), which `imu_fusion_node` blends with the RealSense `/imu/realsense` into `/imu/fused`. Battery/current, encoder, and RC channels are decoded but not yet published. Reconnects on device loss; sends neutral on shutdown.
 - **`pit_protocol`** (`racecar_neo_ros2_driver/pit_protocol.py`) encodes and decodes the wire format from firmware `packets.h` (little-endian, packed): telemetry 94 B magic `0xDEADBEEF`, command 4 B magic `0xBEEFDEAD` + 470 B body, CRC-16/CCITT-FALSE. Pure functions, no ROS or serial dependencies.
 - **`config/pit.yaml`**, **`launch/pit.launch.py`** (watchdog restart target).
 - **Tests**: `test/test_pit_protocol.py` (17) and `test/test_pit_node.py` (10) cover byte layout, CRC, framing and resync, and the IMU transforms.
@@ -18,7 +18,7 @@ This lands the Pi side only. The car does not move and `/imu/lsm9ds1` reads zero
 ### Changed
 
 - **`teleop.launch.py`**: `pit` replaces `pwm` in the always-on control pipeline; the standalone `imu` subsystem is removed (the IMU now arrives via `pit_node` telemetry).
-- **`watchdog.py` / `dashboard.py`**: supervise and monitor `pit` (`/dev/serial0`) in place of `pwm` (`/dev/maestro`) and the standalone `imu` node.
+- **`watchdog.py` / `dashboard.py`**: supervise and monitor `pit` (`/dev/neo-pit-pcb`) in place of `pwm` (`/dev/maestro`) and the standalone `imu` node.
 
 ### Notes
 

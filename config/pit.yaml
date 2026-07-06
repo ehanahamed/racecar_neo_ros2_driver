@@ -1,8 +1,9 @@
 pit_node:
   ros__parameters:
     # Pi <-> Teensy UART. The PIT board wires the Pi's built-in UART (Serial1,
-    # GPIO 14/15) to the Teensy; setup_raspi_config.sh already frees /dev/serial0.
-    serial_port: "/dev/serial0"
+    # GPIO 14/15) to the Teensy. /dev/neo-pit-pcb is a stable udev symlink to the
+    # GPIO UART (ttyAMA0 on Pi 5 / Ubuntu); see scripts/udev/99-racecar.rules.
+    serial_port: "/dev/neo-pit-pcb"
     baud: 921600
 
     # Command stream. Normalized [-1, 1] passthrough; the Teensy maps to PWM.

@@ -75,7 +75,7 @@ class PitNode(Node):
     def __init__(self):
         super().__init__('pit_node')
 
-        self.declare_parameter('serial_port', '/dev/serial0')
+        self.declare_parameter('serial_port', '/dev/neo-pit-pcb')
         self.declare_parameter('baud', 921600)
         self.declare_parameter('command_rate_hz', 60.0)
         self.declare_parameter('command_timeout_sec', 0.5)

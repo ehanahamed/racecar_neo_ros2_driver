@@ -11,6 +11,12 @@
 # v0.0.9 during the new-machine audit).
 SUBSYSTEM=="tty", ENV{ID_VENDOR_ID}=="1ffb", ENV{ID_MODEL_ID}=="0089", ENV{ID_USB_INTERFACE_NUM}=="00", SYMLINK+="maestro", GROUP="dialout", MODE="0660"
 
+# NEO-PIT PCB (Teensy 4.1) drive controller on the Pi's GPIO UART (GPIO 14/15).
+# On Pi 5 / Ubuntu 24.04 that UART enumerates as ttyAMA0 (device-tree alias
+# serial0); Ubuntu does not create the RPi-OS /dev/serial0 symlink, so pin a
+# stable, self-documenting name here. ttyAMA10 is the separate SoC debug UART.
+SUBSYSTEM=="tty", KERNEL=="ttyAMA0", SYMLINK+="neo-pit-pcb", GROUP="dialout", MODE="0660"
+
 # RPLIDAR A3-class via CP2102 USB-UART bridge
 # VID 10c4:ea60. Serial "0001" is generic for CP2102; match by VID:PID only.
 # ID_MM_DEVICE_IGNORE tells ModemManager not to probe this port. Without it,

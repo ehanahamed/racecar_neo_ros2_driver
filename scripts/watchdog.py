@@ -98,8 +98,8 @@ NODES = {
     'pit': {
         'topic': '/imu/lsm9ds1',  # pit_node's steady telemetry output proves the UART link
         'launch': 'pit.launch.py',
-        'device_check': lambda: os.path.exists('/dev/serial0'),
-        'device_label': '/dev/serial0 (Teensy PIT UART)',
+        'device_check': lambda: os.path.exists('/dev/neo-pit-pcb'),
+        'device_label': '/dev/neo-pit-pcb (Teensy PIT UART)',
         'kill_pattern': f'{DRIVER_LIB}/pit_node',
         'process_check': _is_running(f'{DRIVER_LIB}/pit_node'),
     },
