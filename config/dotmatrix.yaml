@@ -13,5 +13,14 @@ dotmatrix_node:
     # republish, the custom pixel frame is dropped and text (if any) takes over.
     pixels_timeout_sec: 5.0
 
+    # One-shot intro: scrolls once on rasterizer launch, then yields to the
+    # drive-mode glyph + label. Empty string disables the splash.
+    splash_message: ">>> Welcome to RACECAR Neo! >>>"
+    splash_period_sec: 8.0
+
+    # Match the mux button mapping so the mode glyph/label track LB/RB.
+    gamepad_enable_button: 4
+    autonomy_enable_button: 5
+
     # Composited 8x24 frame published for pit_node to forward to the Teensy.
     frame_topic: "/dotmatrix/frame"

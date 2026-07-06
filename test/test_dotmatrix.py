@@ -4,9 +4,51 @@ import pytest
 
 from racecar_neo_ros2_driver.dotmatrix_node import (
     decode_pixel_array,
+    GLYPH_AUTO,
+    GLYPH_IDLE,
+    GLYPH_TELEOP,
+    mode_glyph,
+    mode_label,
     rendered_text_width,
     scroll_offset,
 )
+from racecar_neo_ros2_driver.mux_node import MuxMode
+
+
+class TestGlyphShapes:
+    @pytest.mark.parametrize('glyph', [GLYPH_IDLE, GLYPH_TELEOP, GLYPH_AUTO])
+    def test_glyph_is_8x8(self, glyph):
+        assert len(glyph) == 8
+        for row in glyph:
+            assert len(row) == 8
+            assert set(row) <= {'.', 'X'}
+        assert any('X' in row for row in glyph)
+
+
+class TestModeGlyphAndLabel:
+    def test_glyph_mapping(self):
+        assert mode_glyph(MuxMode.IDLE) is GLYPH_IDLE
+        assert mode_glyph(MuxMode.GAMEPAD) is GLYPH_TELEOP
+        assert mode_glyph(MuxMode.AUTONOMY) is GLYPH_AUTO
+
+    def test_label_mapping(self):
+        assert mode_label(MuxMode.IDLE) == 'IDLE'
+        assert mode_label(MuxMode.GAMEPAD) == 'MAN'
+        assert mode_label(MuxMode.AUTONOMY) == 'AUTO'
+
+    @pytest.mark.parametrize('mode', list(MuxMode))
+    def test_label_fits_16px_region(self, mode):
+        from luma.core.legacy.font import proportional
+        from racecar_neo_ros2_driver.dotmatrix_node import TINY_FONT
+        assert rendered_text_width(mode_label(mode), proportional(TINY_FONT)) <= 16
+
+
+class TestSplashConfig:
+    def test_default_splash_in_config_yaml(self):
+        from pathlib import Path
+        cfg = (Path(__file__).parent.parent / 'config' / 'dotmatrix.yaml').read_text()
+        assert 'splash_message:' in cfg
+        assert 'Welcome to RACECAR Neo' in cfg
 
 
 class TestDecodePixelArray:
