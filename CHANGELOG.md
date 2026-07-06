@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-05
+
 Driver-side migration to the NEO-PIT drive controller (Teensy 4.1 PCB, repo `neo-pit-pcb` / firmware `racecar-pit-firmware`), which replaces the Pololu Maestro and moves the LSM9DS1 IMU, INA226 power sensor, and hall encoder onto the board. The Pi now speaks a binary UART protocol to the Teensy instead of driving the Maestro over USB and reading the IMU over I2C. Command semantics are unchanged: `/drive` stays normalized `[-1, 1]`, mapped to servo/ESC PWM on the Teensy (open-loop passthrough).
 
 This lands the Pi side only. The car does not move and `/imu/lsm9ds1` reads zero until the `racecar-pit-firmware` drive/telemetry support is flashed (see Notes).
