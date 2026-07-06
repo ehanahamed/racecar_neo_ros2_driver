@@ -6,11 +6,11 @@ All notable changes to this project will be documented in this file. The format 
 
 Driver-side migration to the NEO-PIT drive controller (Teensy 4.1 PCB, repo `neo-pit-pcb` / firmware `racecar-pit-firmware`), which replaces the Pololu Maestro and moves the LSM9DS1 IMU, INA226 power sensor, and hall encoder onto the board. The Pi now speaks a binary UART protocol to the Teensy instead of driving the Maestro over USB and reading the IMU over I2C. Command semantics are unchanged: `/drive` stays normalized `[-1, 1]`, mapped to servo/ESC PWM on the Teensy (open-loop passthrough).
 
-This lands the Pi side only. The car does not move and `/imu` reads zero until `racecar-pit-firmware` is completed (see Notes).
+This lands the Pi side only. The car does not move and `/imu/lsm9ds1` reads zero until the `racecar-pit-firmware` drive/telemetry support is flashed (see Notes).
 
 ### Added
 
-- **`pit_node`** (`racecar_neo_ros2_driver/pit_node.py`) owns the Pi/Teensy UART on `/dev/serial0`. Subscribes `/motor` and streams command frames at 60 Hz (normalized `[-1, 1]`, per-axis `steering_sign`/`speed_sign`, neutral on a stale command past `command_timeout_sec`); reads telemetry and republishes the LSM9DS1 as `/imu` + `/mag`, preserving the topics and units the old `imu_node` provided. Battery/current, encoder, and RC channels are decoded but not yet published. Reconnects on device loss; sends neutral on shutdown.
+- **`pit_node`** (`racecar_neo_ros2_driver/pit_node.py`) owns the Pi/Teensy UART on `/dev/serial0`. Subscribes `/motor` and streams command frames at 60 Hz (normalized `[-1, 1]`, per-axis `steering_sign`/`speed_sign`, neutral on a stale command past `command_timeout_sec`); reads telemetry and republishes the LSM9DS1 as `/imu/lsm9ds1` + `/mag` (both topic names are parameters), which `imu_fusion_node` blends with the RealSense `/imu/realsense` into `/imu/fused`. Battery/current, encoder, and RC channels are decoded but not yet published. Reconnects on device loss; sends neutral on shutdown.
 - **`pit_protocol`** (`racecar_neo_ros2_driver/pit_protocol.py`) encodes and decodes the wire format from firmware `packets.h` (little-endian, packed): telemetry 94 B magic `0xDEADBEEF`, command 4 B magic `0xBEEFDEAD` + 470 B body, CRC-16/CCITT-FALSE. Pure functions, no ROS or serial dependencies.
 - **`config/pit.yaml`**, **`launch/pit.launch.py`** (watchdog restart target).
 - **Tests**: `test/test_pit_protocol.py` (17) and `test/test_pit_node.py` (10) cover byte layout, CRC, framing and resync, and the IMU transforms.
@@ -22,7 +22,7 @@ This lands the Pi side only. The car does not move and `/imu` reads zero until `
 
 ### Notes
 
-- **Firmware dependency.** The current `racecar-pit-firmware` `main.cpp` decodes the Pi command but never actuates it, and leaves IMU, power, timestamp, and CRC unfilled in the telemetry packet. Until it is completed, `pit_node` runs correctly but the car does not respond to `/drive` and `/imu` publishes zeros. `require_crc` defaults `false` for the same reason.
+- **Firmware dependency.** Drive actuation (RC-priority override, Pi fallback), IMU/power/timestamp telemetry, and CRC-16 both directions are implemented on `racecar-pit-firmware` branch `feature/drive-telemetry` but not yet flashed or verified on the car. Until that firmware is flashed, `pit_node` runs correctly but the car does not respond to `/drive` and `/imu/lsm9ds1` publishes zeros. `require_crc` stays `false` until the CRC path is verified end-to-end on hardware.
 - **IMU calibration unverified.** `pit.yaml` `imu.*_axis_order/sign` and `gyro_scale`/`mag_scale` default to pass-through and must be checked against the LSM9DS1 mounting on the PCB and the units the firmware's Adafruit driver emits.
 - **Legacy path retained, not retired.** `pwm_node`, `maestro.py`, `imu_node`, their launch files, and `config/pwm.yaml` remain installed but are out of the teleop graph. `test_hardware::TestMaestro`, `test_setup_scripts`, and the `/dev/maestro` udev rule still assert the old hardware and will fail on a PIT-equipped car until retired.
 

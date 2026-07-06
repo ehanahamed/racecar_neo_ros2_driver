@@ -18,9 +18,13 @@ pit_node:
     # Firmware does not compute the CRC-16 yet; keep false until it does.
     require_crc: false
 
-    # ---- IMU republish (/imu, /mag) ----
+    # ---- IMU republish (/imu/lsm9ds1, /mag) ----
+    # imu_fusion_node blends /imu/lsm9ds1 with /imu/realsense into /imu/fused,
+    # the single IMU the library reads.
     frame_id: imu_link
     publish_mag: true
+    imu_topic: "/imu/lsm9ds1"
+    mag_topic: "/mag"
 
     # UNVERIFIED against the LSM9DS1 mounting on the PIT PCB. Defaults pass the
     # raw firmware axes straight through. The physical-axis convention students

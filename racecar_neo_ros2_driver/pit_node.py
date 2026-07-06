@@ -7,8 +7,9 @@ reader (imu_node). One node owns the serial port because only one process can:
   - subscribes /motor (AckermannDriveStamped, normalized [-1, 1]) and streams
     command frames to the Teensy at command_rate_hz (normalized passthrough:
     the Teensy maps the values to servo/ESC PWM);
-  - reads telemetry frames and republishes the LSM9DS1 as /imu + /mag, keeping
-    the topic/units contract the old imu_node provided.
+  - reads telemetry frames and republishes the LSM9DS1 as /imu/lsm9ds1 + /mag
+    (imu_fusion_node blends /imu/lsm9ds1 with the RealSense /imu/realsense into
+    /imu/fused, the single IMU the library reads); both topics are parameters.
 
 Battery/current, encoder, and RC-channel fields are decoded but not published
 yet (deferred; see config/pit.yaml). Command values are forwarded raw with a
@@ -85,6 +86,9 @@ class PitNode(Node):
 
         self.declare_parameter('frame_id', 'imu_link')
         self.declare_parameter('publish_mag', True)
+        # imu_fusion_node blends this with /imu/realsense into /imu/fused.
+        self.declare_parameter('imu_topic', '/imu/lsm9ds1')
+        self.declare_parameter('mag_topic', '/mag')
         # Axis remap + unit scales. Identity/pass-through until verified on the PCB.
         self.declare_parameter('imu.accel_gyro_axis_order', [0, 1, 2])
         self.declare_parameter('imu.accel_gyro_axis_sign', [1.0, 1.0, 1.0])
@@ -110,6 +114,8 @@ class PitNode(Node):
         self._require_crc = bool(self.get_parameter('require_crc').value)
         self._frame = self.get_parameter('frame_id').value
         self._publish_mag = bool(self.get_parameter('publish_mag').value)
+        self._imu_topic = self.get_parameter('imu_topic').value
+        self._mag_topic = self.get_parameter('mag_topic').value
 
         self._ag_order = list(self.get_parameter('imu.accel_gyro_axis_order').value)
         self._ag_sign = list(self.get_parameter('imu.accel_gyro_axis_sign').value)
@@ -133,8 +139,8 @@ class PitNode(Node):
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
             durability=QoSDurabilityPolicy.VOLATILE,
         )
-        self._pub_imu = self.create_publisher(Imu, '/imu', qos)
-        self._pub_mag = self.create_publisher(MagneticField, '/mag', qos)
+        self._pub_imu = self.create_publisher(Imu, self._imu_topic, qos)
+        self._pub_mag = self.create_publisher(MagneticField, self._mag_topic, qos)
         self.create_subscription(AckermannDriveStamped, '/motor', self._motor_cb, qos)
 
         self._latest_speed = 0.0
@@ -159,7 +165,7 @@ class PitNode(Node):
         )
         self.get_logger().warn(
             'Verify IMU axis order/sign and gyro/mag scales against the PIT board '
-            'before trusting /imu and /mag.'
+            f'before trusting {self._imu_topic} and {self._mag_topic}.'
         )
 
     def _open_serial(self) -> bool:

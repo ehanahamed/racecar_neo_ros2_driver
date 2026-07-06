@@ -96,7 +96,7 @@ def _usb_device_present(usb_id: str) -> bool:
 NODES = {
     # ----- Control pipeline (safety-critical) -----
     'pit': {
-        'topic': '/imu',  # pit_node's steady telemetry output proves the UART link
+        'topic': '/imu/lsm9ds1',  # pit_node's steady telemetry output proves the UART link
         'launch': 'pit.launch.py',
         'device_check': lambda: os.path.exists('/dev/serial0'),
         'device_label': '/dev/serial0 (Teensy PIT UART)',

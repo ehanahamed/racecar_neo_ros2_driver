@@ -30,7 +30,7 @@ RATE_WINDOW_SEC = 3.0
 # the card may go red without any recovery — surface that to the operator so
 # the asymmetry isn't silent.
 MONITORED = {
-    'pit': {'topic': '/imu', 'label': 'PIT board (drive + IMU)', 'supervised': True},
+    'pit': {'topic': '/imu/lsm9ds1', 'label': 'PIT board (drive + IMU)', 'supervised': True},
     'throttle': {'topic': '/motor', 'label': 'Throttle (clamping)', 'supervised': True},
     'mux': {'topic': '/mux_out', 'label': 'Mux (arbitrator)', 'supervised': True},
     'gamepad': {'topic': '/gamepad_drive', 'label': 'Gamepad', 'supervised': True},
@@ -47,6 +47,7 @@ RATE_TOPICS = [
     '/mux_out',
     '/imu/fused',
     '/imu/realsense',
+    '/imu/lsm9ds1',
     '/scan',
     '/camera/color',
     '/camera/depth',
