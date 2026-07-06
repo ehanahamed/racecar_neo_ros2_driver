@@ -20,11 +20,14 @@ This lands the Pi side only. The car does not move and `/imu/lsm9ds1` reads zero
 - **`teleop.launch.py`**: `pit` replaces `pwm` in the always-on control pipeline; the standalone `imu` subsystem is removed (the IMU now arrives via `pit_node` telemetry).
 - **`watchdog.py` / `dashboard.py`**: supervise and monitor `pit` (`/dev/neo-pit-pcb`) in place of `pwm` (`/dev/maestro`) and the standalone `imu` node.
 
+### Removed
+
+- The Pololu Maestro drive path and the I2C IMU node, now superseded by `pit_node` and the Teensy: `pwm_node`, `maestro.py`, `imu_node`, `config/pwm.yaml`, `launch/pwm.launch.py`, `launch/imu.launch.py`, their unit tests, the `/dev/maestro` udev rule, and the `TestMaestro` / Pi-side `TestLSM9DS1` hardware checks. The `lsm9ds1_cal.yaml` / `lsm9ds1_mag_cal.yaml` calibration files stay; `pit_node` reads them.
+
 ### Notes
 
-- **Firmware dependency.** Drive actuation (RC-priority override, Pi fallback), IMU/power/timestamp telemetry, and CRC-16 both directions are implemented on `racecar-pit-firmware` branch `feature/drive-telemetry` but not yet flashed or verified on the car. Until that firmware is flashed, `pit_node` runs correctly but the car does not respond to `/drive` and `/imu/lsm9ds1` publishes zeros. `require_crc` stays `false` until the CRC path is verified end-to-end on hardware.
+- **Firmware.** The paired `racecar-pit-firmware` (branch `feature/drive-telemetry`) is bench-verified on hardware: telemetry CRC valid, IMU/voltage/encoder populate, and a Pi throttle command ramps the motor with the ESC-friendly slew. `require_crc` stays `false` pending a longer soak of the CRC path.
 - **IMU calibration unverified.** `pit.yaml` `imu.*_axis_order/sign` and `gyro_scale`/`mag_scale` default to pass-through and must be checked against the LSM9DS1 mounting on the PCB and the units the firmware's Adafruit driver emits.
-- **Legacy path retained, not retired.** `pwm_node`, `maestro.py`, `imu_node`, their launch files, and `config/pwm.yaml` remain installed but are out of the teleop graph. `test_hardware::TestMaestro`, `test_setup_scripts`, and the `/dev/maestro` udev rule still assert the old hardware and will fail on a PIT-equipped car until retired.
 
 ## [0.2.2] - 2026-07-05
 

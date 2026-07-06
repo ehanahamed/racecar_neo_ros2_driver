@@ -39,7 +39,7 @@ echo "==> [4/11] raspi-config flags (I2C, SPI, serial)"
 bash "$SCRIPT_DIR/setup_raspi_config.sh"
 
 echo
-echo "==> [5/11] udev rules (stable /dev/maestro, /dev/lidar)"
+echo "==> [5/11] udev rules (stable /dev/neo-pit-pcb, /dev/lidar)"
 bash "$SCRIPT_DIR/setup_udev.sh"
 
 echo

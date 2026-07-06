@@ -67,34 +67,6 @@ def _user_in_group(name):
 
 
 # ---------------------------------------------------------------------------
-# Pololu Maestro — drive ESC (ch 0) + steering servo (ch 1)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.hardware
-class TestMaestro:
-    DEVICE = '/dev/maestro'
-    POLOLU_USB_ID = '1ffb:0089'
-
-    def test_device_symlink_exists(self):
-        assert os.path.exists(self.DEVICE), (
-            f'{self.DEVICE} symlink not present. Run `bash scripts/setup_udev.sh` '
-            f'to install the udev rules, then unplug+replug the Maestro. '
-            f'Verify with `lsusb | grep -i pololu`.'
-        )
-
-    def test_maestro_enumerated(self):
-        assert _lsusb_match(self.POLOLU_USB_ID), (
-            'Pololu Maestro not detected via lsusb. Check the USB cable.'
-        )
-
-    def test_user_in_dialout(self):
-        assert _user_in_group('dialout'), (
-            'User not in dialout group. Fix: '
-            'sudo usermod -aG dialout $USER and log out + back in.'
-        )
-
-
-# ---------------------------------------------------------------------------
 # RPLIDAR — 2D LIDAR
 # ---------------------------------------------------------------------------
 
@@ -146,44 +118,6 @@ class TestGamepad:
             'No joystick detected. Plug in the gamepad and ensure the USB '
             'dongle is seated; check `ls /dev/input/` and '
             '`cat /proc/bus/input/devices`.'
-        )
-
-
-# ---------------------------------------------------------------------------
-# LSM9DS1 IMU — accel/gyro at 0x6B, magnetometer at 0x1E on I²C bus 1
-# ---------------------------------------------------------------------------
-
-@pytest.mark.hardware
-class TestLSM9DS1:
-    BUS = 1
-    ACCEL_GYRO_ADDR = 0x6B
-    MAGNETOMETER_ADDR = 0x1E
-
-    def test_i2c_bus_present(self):
-        path = f'/dev/i2c-{self.BUS}'
-        assert os.path.exists(path), (
-            f'{path} not present. Enable I²C: '
-            'sudo raspi-config nonint do_i2c 0 && sudo reboot.'
-        )
-
-    def test_user_in_i2c_group(self):
-        assert _user_in_group('i2c'), (
-            'User not in i2c group. Fix: '
-            'sudo usermod -aG i2c $USER and log out + back in.'
-        )
-
-    def test_accel_gyro_responds(self):
-        assert _i2c_probe(self.BUS, self.ACCEL_GYRO_ADDR), (
-            f'No device at I²C bus {self.BUS} address '
-            f'0x{self.ACCEL_GYRO_ADDR:02x} (LSM9DS1 accel/gyro). Check '
-            f'wiring and that the IMU board is powered.'
-        )
-
-    def test_magnetometer_responds(self):
-        assert _i2c_probe(self.BUS, self.MAGNETOMETER_ADDR), (
-            f'No device at I²C bus {self.BUS} address '
-            f'0x{self.MAGNETOMETER_ADDR:02x} (LSM9DS1 magnetometer). Check '
-            f'wiring.'
         )
 
 

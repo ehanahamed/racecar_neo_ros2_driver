@@ -252,7 +252,7 @@ class TestUdevRules:
         assert self.RULES_FILE.is_file(), f'{self.RULES_FILE} missing'
 
     @pytest.mark.parametrize('symlink', [
-        'maestro', 'lidar',
+        'neo-pit-pcb', 'lidar',
     ])
     def test_rules_define_symlink(self, symlink):
         text = self.RULES_FILE.read_text()
@@ -291,15 +291,13 @@ class TestUdevRules:
             'lidar rule must set ID_MM_DEVICE_IGNORE=1 to block ModemManager probes'
         )
 
-    def test_maestro_rule_pins_command_interface(self):
-        # The Maestro exposes two CDC ACM interfaces (00 = command, 02 = aux TTL).
-        # The rule must pin interface 00 or /dev/maestro races between the two.
+    def test_neo_pit_rule_matches_gpio_uart(self):
+        # The NEO-PIT PCB is on the Pi's GPIO UART, which enumerates as ttyAMA0
+        # on Pi 5 / Ubuntu (there is no /dev/serial0). Pin the symlink to that
+        # kernel name so ttyAMA10 (the SoC debug UART) is never matched.
         text = self.RULES_FILE.read_text()
-        assert 'ENV{ID_VENDOR_ID}=="1ffb"' in text, 'Maestro VID not matched via ENV'
-        assert 'ENV{ID_USB_INTERFACE_NUM}=="00"' in text, (
-            'Maestro rule must pin ID_USB_INTERFACE_NUM=00 (command port). '
-            'Without this, /dev/maestro may bind to the wrong CDC interface.'
-        )
+        assert 'KERNEL=="ttyAMA0"' in text, 'neo-pit-pcb rule must match ttyAMA0'
+        assert 'SYMLINK+="neo-pit-pcb"' in text, 'neo-pit-pcb symlink rule missing'
 
 
 class TestHidNintendoBlacklist:

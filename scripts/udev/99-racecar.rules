@@ -2,15 +2,6 @@
 # Installed to /etc/udev/rules.d/ by scripts/setup_udev.sh.
 # After install: sudo udevadm control --reload-rules && sudo udevadm trigger
 
-# Pololu Micro Maestro 6-Servo Controller (drive ESC + steering servo)
-# VID 1ffb:0089. The Maestro exposes two CDC ACM interfaces:
-# ID_USB_INTERFACE_NUM=00 is the command port, =02 is an auxiliary TTL serial
-# we don't use — match only the command port. Match on VID:PID rather than
-# serial so the rule works on any fleet unit (each Maestro has a different
-# factory serial; pinning to one was a per-machine portability bug fixed in
-# v0.0.9 during the new-machine audit).
-SUBSYSTEM=="tty", ENV{ID_VENDOR_ID}=="1ffb", ENV{ID_MODEL_ID}=="0089", ENV{ID_USB_INTERFACE_NUM}=="00", SYMLINK+="maestro", GROUP="dialout", MODE="0660"
-
 # NEO-PIT PCB (Teensy 4.1) drive controller on the Pi's GPIO UART (GPIO 14/15).
 # On Pi 5 / Ubuntu 24.04 that UART enumerates as ttyAMA0 (device-tree alias
 # serial0); Ubuntu does not create the RPi-OS /dev/serial0 symlink, so pin a

@@ -24,9 +24,8 @@ This package is the v2 successor to [`racecar-neo-ros2-backend`](https://github.
 |---|---|---|
 | Camera (color+depth+IMU) | Intel RealSense D435i | realsense2_camera over USB 3.x (`8086:0b3a`) |
 | 2D LIDAR | RPLIDAR A3-class | UART (`/dev/lidar`) |
-| IMU | LSM9DS1 | I²C (`0x6B` + `0x1E`) |
 | Gamepad | Switch Pro / EasySMX | USB HID (`/dev/input/event*` or `/dev/input/js*`) |
-| Motor / steering | Pololu Maestro | USB serial (`/dev/maestro`) |
+| Motor / steering / IMU / power | NEO-PIT PCB (Teensy 4.1; LSM9DS1 + INA226 + hall encoder onboard) | UART (`/dev/neo-pit-pcb`) |
 | ML inference | Coral EdgeTPU | USB |
 | Display | MAX7219 dot matrix (3 cascaded) | SPI (`/dev/spidev0.0`) |
 
@@ -36,7 +35,7 @@ All `/dev/*` paths are stable udev symlinks installed by `scripts/setup_udev.sh`
 
 ```
 EasySMX ─→ joy_node ─→ gamepad_node ──┐
-                                       ├──→ mux ──→ throttle ──→ pwm ──→ Maestro
+                                       ├──→ mux ──→ throttle ──→ pit ──→ NEO-PIT PCB
                        /drive (auto) ──┘
 ```
 
@@ -148,8 +147,8 @@ Eleven phases, all under `scripts/`:
 1. **`setup_ros2.sh`**: ROS2 Jazzy apt repo + message/driver packages
 2. **`setup_dev_tools.sh`**: build tools, Python hardware libs (`smbus` / `serial` / `spidev`)
 3. **`setup_user_env.sh`**: joins `dialout` / `i2c` / `spi` / `gpio` / `video` groups; sources ROS2 + the `racecar` shell tool in `.bashrc`
-4. **`setup_raspi_config.sh`**: `raspi-config` flags: enable I2C, enable SPI, disable serial console (frees `/dev/serial0`)
-5. **`setup_udev.sh`**: installs `/etc/udev/rules.d/99-racecar.rules` (stable `/dev/maestro`, `/dev/lidar`)
+4. **`setup_raspi_config.sh`**: `raspi-config` flags: enable I2C, enable SPI, disable serial console (frees the GPIO UART / `ttyAMA0` for the NEO-PIT link)
+5. **`setup_udev.sh`**: installs `/etc/udev/rules.d/99-racecar.rules` (stable `/dev/neo-pit-pcb`, `/dev/lidar`)
 6. **`setup_dotmatrix.sh`**: `pip install --user luma.led_matrix`
 7. **`setup_coral.sh`**: installs `libedgetpu1-std`, `tflite_runtime`, `pycoral` from vendored `depend/` artifacts
 8. **`setup_realsense.sh`**: installs `realsense2_camera` (apt) + the Pi 5 IMU IIO permission fix (script, udev rule, boot service)

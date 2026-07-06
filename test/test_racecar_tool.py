@@ -84,7 +84,7 @@ def test_selftest_without_target_errors():
 
 
 def test_selftest_rejects_unknown_flag():
-    result = _run('selftest', '--maestro')
+    result = _run('selftest', '--bogus')
     assert result.returncode == 2
     assert 'unknown flag' in result.stderr
 

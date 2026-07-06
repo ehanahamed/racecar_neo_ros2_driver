@@ -562,10 +562,10 @@ __RC_SELFTEST_HELP__
 
         status)
             echo "=== USB peripherals ==="
-            lsusb | grep -iE "pololu|silicon labs|intel|global unichip|google" || echo "  (none of the expected USB devices found)"
+            lsusb | grep -iE "silicon labs|intel|global unichip|google" || echo "  (none of the expected USB devices found)"
             echo
             echo "=== Stable device symlinks ==="
-            for s in maestro lidar; do
+            for s in neo-pit-pcb lidar; do
                 if [[ -e "/dev/$s" ]]; then
                     printf "  /dev/%-14s -> %s\n" "$s" "$(readlink -f /dev/$s)"
                 else
@@ -601,7 +601,7 @@ Commands:
                                   racecar launch realsense
                                   racecar launch edgetpu
     clear --dmatrix     Flash + clear the MAX7219 dot matrix display.
-    udev                Re-install the udev rules (refreshes /dev/maestro etc.).
+    udev                Re-install the udev rules (refreshes /dev/neo-pit-pcb etc.).
     watchdog            Run the node watchdog (restart-on-failure supervisor).
                         Monitors control + sensor nodes; logs to
                         ~/logs/latest/watchdog.log. Assumes teleop runs separately.
