@@ -302,39 +302,9 @@ class TestCoral:
         )
 
 
-# ---------------------------------------------------------------------------
-# MAX7219 dot matrix — SPI (Phase 3B)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.hardware
-class TestDotMatrix:
-    SPI_DEVICE = '/dev/spidev0.0'
-
-    def test_spi_device_present(self):
-        assert os.path.exists(self.SPI_DEVICE), (
-            f'{self.SPI_DEVICE} not present. Enable SPI: '
-            'sudo raspi-config nonint do_spi 0 && sudo reboot.'
-        )
-
-    def test_user_in_spi_group(self):
-        try:
-            grp.getgrnam('spi')
-        except KeyError:
-            pytest.skip(
-                'spi group not present yet; enable SPI with '
-                '`sudo raspi-config nonint do_spi 0 && sudo reboot` first.'
-            )
-        assert _user_in_group('spi'), (
-            'User not in spi group. Fix: '
-            'sudo usermod -aG spi $USER and log out + back in.'
-        )
-
-    @pytest.mark.skipif(
-        importlib.util.find_spec('luma') is None,
-        reason='luma.led_matrix not yet installed (Phase 3B)',
-    )
-    def test_luma_importable(self):
-        import luma.led_matrix  # noqa: F401
+# The MAX7219 dot matrix moved onto the NEO-PIT board (v0.3.0) and is driven by
+# the Teensy over the UART command frame, not the Pi's SPI bus, so the former
+# SPI-device / luma.led_matrix hardware checks were removed in v0.4.0.
 
 
 # ---------------------------------------------------------------------------

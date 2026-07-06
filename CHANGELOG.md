@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-06
+
+NEO-PIT communication maturity: the Teensy now owns the physical PWM limits and the display peripherals, the Pi exposes encoder speed and forwards dot-matrix/LED content and drive state over the command frame. Pairs with `racecar-pit-firmware` v0.4.0. Drive polarity and dot-matrix pixel orientation are settled on hardware (see Notes).
+
+### Added
+
+- **`/encoder/speed`** (`std_msgs/Float32`): `pit_node` republishes the Teensy encoder telemetry as vehicle speed in m/s (`encoder_topic` parameter).
+- **`pit_node` display forwarding**: subscribes `dotmatrix_topic` (`/dotmatrix/frame`) and `led_topic` (`/led/pixels`) and packs them into the command frame; derives the drive mode from `/joy` and sends it plus per-display "active" flags and a `driver_starting` flag in the command `SystemState` byte (bit layout mirrors firmware `cfg::SYS_STATE`). New params: `encoder_topic`, `dotmatrix_topic`, `led_topic`, `display_timeout_sec`, `led_startup_sec`, `gamepad_enable_button`, `autonomy_enable_button`.
+
+### Changed
+
+- **`config/throttle.yaml`**: `max_steering` and `max_speed_forward`/`backward` default to `1.0`. The Teensy owns the physical PWM safety limits now (`speed_pwm_*`/`angle_pwm_*` in firmware config), so the Pi passes the full `[-1, 1]` range; lower `max_speed_*` for finer control.
+- **`dotmatrix_node`** is repurposed from a Pi-SPI MAX7219 driver into a **rasterizer**: it composites `/dotmatrix/text` and `/dotmatrix/pixels` into an 8x24 frame on `/dotmatrix/frame` for the Teensy, and publishes only while there is student content. The idle splash and drive-mode glyph now render on the Teensy. Dropped the luma/SPI device, `block_orientation`/`contrast`/`splash_*` params, and the mode-glyph/label rendering.
+
+### Removed
+
+- The Pi-SPI dot-matrix hardware checks (`TestDotMatrix`: SPI device/group, `luma.led_matrix` import) and the glyph/label/splash helpers and their tests; the matrix is Teensy-driven now.
+
+### Notes
+
+- **Drive polarity + dot-matrix orientation unverified in this commit.** The firmware PWM mapping is now `+1 -> max` (above neutral); confirm forward/left on hardware and flip `pit.yaml` `speed_sign`/`steering_sign` if needed. The dot-matrix `setPoint` origin/rotation may need a transform to match the old SPI rendering.
+
 ## [0.3.2] - 2026-07-06
 
 ### Changed

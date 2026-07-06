@@ -11,11 +11,14 @@ reader (imu_node). One node owns the serial port because only one process can:
     (imu_fusion_node blends /imu/lsm9ds1 with the RealSense /imu/realsense into
     /imu/fused, the single IMU the library reads); both topics are parameters.
 
-Battery/current, encoder, and RC-channel fields are decoded but not published
-yet (deferred; see config/pit.yaml). Command values are forwarded raw with a
-per-axis sign so steering/throttle polarity can be corrected on hardware without
-reflashing. On a stale or missing /motor command the node sends neutral, and it
-tolerates a missing/again-missing serial device (retries, never crashes).
+Encoder telemetry is republished as vehicle speed (m/s) on encoder_topic;
+battery/current and RC-channel fields are decoded but not published yet. The
+node also forwards display state to the Teensy in each command frame: the drive
+mode (from /joy) and per-display "active" flags in SystemState, plus the
+dot-matrix bitmap (dotmatrix_topic) and LED colors (led_topic). Command values
+are forwarded raw with a per-axis sign so steering/throttle polarity can be
+corrected on hardware without reflashing. On a stale or missing /motor command
+the node sends neutral, and it tolerates a missing serial device (retries).
 
 IMU axis order/sign and the gyro/mag unit scales default to identity/pass-through
 and MUST be verified against the LSM9DS1 mounting on the PIT PCB and the units
@@ -37,10 +40,32 @@ from rclpy.qos import (
     QoSProfile,
     QoSReliabilityPolicy,
 )
-from sensor_msgs.msg import Imu, MagneticField
+from sensor_msgs.msg import Imu, Joy, MagneticField
 import serial
+from std_msgs.msg import Float32, UInt8MultiArray
 
 from . import pit_protocol as pit
+from .mux_node import MuxMode, select_mode
+
+
+# RxPacket.SystemState bit layout; mirror of the firmware cfg::SYS_STATE.
+SYS_MODE_MASK = 0x03
+SYS_MODE_IDLE = 0
+SYS_MODE_MANUAL = 1
+SYS_MODE_AUTO = 2
+SYS_DOTMATRIX_ACTIVE = 0x04
+SYS_LED_ACTIVE = 0x08
+SYS_DRIVER_STARTING = 0x10
+
+# Display payload sizes: 8x24 monochrome bitmap, 84 RGB LED triplets.
+DOT_FRAME_LEN = 192
+LED_FRAME_LEN = 84 * 3
+
+_MODE_BITS = {
+    MuxMode.IDLE: SYS_MODE_IDLE,
+    MuxMode.GAMEPAD: SYS_MODE_MANUAL,
+    MuxMode.AUTONOMY: SYS_MODE_AUTO,
+}
 
 
 def clamp(value: float, low: float = -1.0, high: float = 1.0) -> float:
@@ -84,6 +109,20 @@ class PitNode(Node):
         self.declare_parameter('speed_sign', 1)
         self.declare_parameter('require_crc', False)
 
+        # Encoder speed republish + display/LED command forwarding to the Teensy.
+        self.declare_parameter('encoder_topic', '/encoder/speed')
+        self.declare_parameter('dotmatrix_topic', '/dotmatrix/frame')
+        self.declare_parameter('led_topic', '/led/pixels')
+        # A display command counts as "active" (sets the SystemState flag the
+        # Teensy watches) only while received within this window.
+        self.declare_parameter('display_timeout_sec', 0.5)
+        # Hold the driver_starting flag this long after launch so the Teensy
+        # plays its LED loading sweep on a genuine driver start.
+        self.declare_parameter('led_startup_sec', 10.0)
+        # Mirror the mux buttons so the Teensy dot-matrix glyph tracks the mode.
+        self.declare_parameter('gamepad_enable_button', 4)
+        self.declare_parameter('autonomy_enable_button', 5)
+
         self.declare_parameter('frame_id', 'imu_link')
         self.declare_parameter('publish_mag', True)
         # imu_fusion_node blends this with /imu/realsense into /imu/fused.
@@ -116,6 +155,13 @@ class PitNode(Node):
         self._publish_mag = bool(self.get_parameter('publish_mag').value)
         self._imu_topic = self.get_parameter('imu_topic').value
         self._mag_topic = self.get_parameter('mag_topic').value
+        self._encoder_topic = self.get_parameter('encoder_topic').value
+        self._dotmatrix_topic = self.get_parameter('dotmatrix_topic').value
+        self._led_topic = self.get_parameter('led_topic').value
+        self._display_timeout = float(self.get_parameter('display_timeout_sec').value)
+        self._led_startup = float(self.get_parameter('led_startup_sec').value)
+        self._gamepad_btn = int(self.get_parameter('gamepad_enable_button').value)
+        self._auto_btn = int(self.get_parameter('autonomy_enable_button').value)
 
         self._ag_order = list(self.get_parameter('imu.accel_gyro_axis_order').value)
         self._ag_sign = list(self.get_parameter('imu.accel_gyro_axis_sign').value)
@@ -141,11 +187,21 @@ class PitNode(Node):
         )
         self._pub_imu = self.create_publisher(Imu, self._imu_topic, qos)
         self._pub_mag = self.create_publisher(MagneticField, self._mag_topic, qos)
+        self._pub_encoder = self.create_publisher(Float32, self._encoder_topic, qos)
         self.create_subscription(AckermannDriveStamped, '/motor', self._motor_cb, qos)
+        self.create_subscription(UInt8MultiArray, self._dotmatrix_topic, self._dot_cb, qos)
+        self.create_subscription(UInt8MultiArray, self._led_topic, self._led_cb, qos)
+        self.create_subscription(Joy, '/joy', self._joy_cb, qos)
 
         self._latest_speed = 0.0
         self._latest_steer = 0.0
         self._cmd_stamp = 0.0
+        self._dot_frame = None
+        self._dot_stamp = 0.0
+        self._led_frame = None
+        self._led_stamp = 0.0
+        self._joy_buttons = []
+        self._start_time = time.monotonic()
         self._ser = None
         self._write_lock = threading.Lock()
         self._crc_fail_count = 0
@@ -183,13 +239,50 @@ class PitNode(Node):
         self._latest_steer = clamp(msg.drive.steering_angle)
         self._cmd_stamp = time.monotonic()
 
+    def _dot_cb(self, msg: UInt8MultiArray):
+        data = bytes(bytearray(msg.data))[:DOT_FRAME_LEN]
+        self._dot_frame = data.ljust(DOT_FRAME_LEN, b'\x00')
+        self._dot_stamp = time.monotonic()
+
+    def _led_cb(self, msg: UInt8MultiArray):
+        data = bytes(bytearray(msg.data))[:LED_FRAME_LEN]
+        self._led_frame = data.ljust(LED_FRAME_LEN, b'\x00')
+        self._led_stamp = time.monotonic()
+
+    def _joy_cb(self, msg: Joy):
+        self._joy_buttons = list(msg.buttons)
+
+    def _build_display(self, now: float):
+        """Build the SystemState byte + dot-matrix/LED payloads for this frame."""
+        mode = select_mode(self._joy_buttons, self._gamepad_btn, self._auto_btn)
+        state = _MODE_BITS.get(mode, SYS_MODE_IDLE)
+
+        dot = None
+        if self._dot_frame is not None and (now - self._dot_stamp) <= self._display_timeout:
+            dot = self._dot_frame
+            state |= SYS_DOTMATRIX_ACTIVE
+
+        led = None
+        if self._led_frame is not None and (now - self._led_stamp) <= self._display_timeout:
+            led = self._led_frame
+            state |= SYS_LED_ACTIVE
+
+        if (now - self._start_time) < self._led_startup:
+            state |= SYS_DRIVER_STARTING
+
+        return state, dot, led
+
     def _send_command(self):
         if self._ser is None or not self._ser.is_open:
             return
-        fresh = (time.monotonic() - self._cmd_stamp) <= self._cmd_timeout
+        now = time.monotonic()
+        fresh = (now - self._cmd_stamp) <= self._cmd_timeout
         speed = self._speed_sign * self._latest_speed if fresh else 0.0
         steer = self._steer_sign * self._latest_steer if fresh else 0.0
-        wire = pit.encode_command(clamp(steer), clamp(speed))
+        state, dot, led = self._build_display(now)
+        wire = pit.encode_command(
+            clamp(steer), clamp(speed), system_state=state, dot_matrix=dot, led=led
+        )
         try:
             with self._write_lock:
                 self._ser.write(wire)
@@ -247,6 +340,11 @@ class PitNode(Node):
         imu.angular_velocity.y = float(gyro[1])
         imu.angular_velocity.z = float(gyro[2])
         self._pub_imu.publish(imu)
+
+        # Encoder telemetry is vehicle speed in m/s (firmware getCurrentSpeed()).
+        enc = Float32()
+        enc.data = float(telem.encoder)
+        self._pub_encoder.publish(enc)
 
         if self._publish_mag:
             mag_vec = transform_mag(

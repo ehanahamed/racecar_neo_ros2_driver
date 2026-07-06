@@ -1,7 +1,9 @@
 throttle_node:
   ros__parameters:
-    # Single source of truth for top speed. Fractions of full PWM swing.
-    # Defaults preserve v1 top speed (PWM 6510 fwd / 5280 rev / ±2500 steer offset).
-    max_speed_forward: 0.5
-    max_speed_backward: 0.6
-    max_steering: 0.625
+    # As of v0.4.0 the Teensy owns the physical PWM limits (speed_pwm_*/
+    # angle_pwm_* in the firmware config), so the Pi passes the full [-1, 1]
+    # range through by default. Steering is a straight pass-through; lower
+    # max_speed_forward/backward below 1.0 for finer speed control.
+    max_speed_forward: 1.0
+    max_speed_backward: 1.0
+    max_steering: 1.0
