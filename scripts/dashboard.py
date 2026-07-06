@@ -195,9 +195,12 @@ def _read_watchdog_tail(n: int = 10, max_bytes: int = 4096):
     return tail.decode(errors='replace').splitlines()[-n:]
 
 
-# RTC battery thresholds — same as TestRTC. Below 2.7 V the CR2032 can't
-# reliably drive the PCF85063 RTC and the clock resets on next power-off.
-RTC_OK_VOLTS = 3.0
+# RTC battery thresholds for the rechargeable backup cell (usable 2.7-3.0 V,
+# replacing the old CR2032 at 3.0-3.3 V). 2.7 V is the PCF85063 RTC's own
+# floor: below it the clock resets on next power-off regardless of chemistry,
+# so it doubles as the recharge line. OK above 2.8 V leaves a "recharge soon"
+# band before the floor. Kept in sync with TestRTC.BATT_MIN_VOLTS.
+RTC_OK_VOLTS = 2.8
 RTC_LOW_VOLTS = 2.7
 
 
@@ -236,8 +239,8 @@ def _classify_rtc(volts):
     if volts >= RTC_OK_VOLTS:
         return ('healthy', f'{volts:.2f} V')
     if volts >= RTC_LOW_VOLTS:
-        return ('stale', f'{volts:.2f} V — replace soon')
-    return ('dead', f'{volts:.2f} V — REPLACE NOW')
+        return ('stale', f'{volts:.2f} V — recharge soon')
+    return ('dead', f'{volts:.2f} V — RECHARGE NOW')
 
 
 def _collect_system_health():
