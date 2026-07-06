@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file. The format 
 
 Driver-side migration to the NEO-PIT drive controller (Teensy 4.1 PCB, repo `neo-pit-pcb` / firmware `racecar-pit-firmware`), which replaces the Pololu Maestro and moves the LSM9DS1 IMU, INA226 power sensor, and hall encoder onto the board. The Pi now speaks a binary UART protocol to the Teensy instead of driving the Maestro over USB and reading the IMU over I2C. Command semantics are unchanged: `/drive` stays normalized `[-1, 1]`, mapped to servo/ESC PWM on the Teensy (open-loop passthrough).
 
-This lands the Pi side only. The car does not move and `/imu/lsm9ds1` reads zero until the `racecar-pit-firmware` drive/telemetry support is flashed (see Notes).
+Verified end-to-end on-robot (2026-07-06, wheels up): with the paired `racecar-pit-firmware` flashed, an Xbox controller drives the car through the mux to the ESC and servo, and `/imu/lsm9ds1` streams live LSM9DS1 telemetry. See Notes.
 
 ### Added
 
@@ -28,7 +28,8 @@ This lands the Pi side only. The car does not move and `/imu/lsm9ds1` reads zero
 
 ### Notes
 
-- **Firmware.** The paired `racecar-pit-firmware` (branch `feature/drive-telemetry`) is bench-verified on hardware: telemetry CRC valid, IMU/voltage/encoder populate, and a Pi throttle command ramps the motor with the ESC-friendly slew. `require_crc` stays `false` pending a longer soak of the CRC path.
+- **Firmware.** The paired `racecar-pit-firmware` (branch `feature/drive-telemetry`, firmware PR #1) is on-robot verified: telemetry CRC valid, IMU/voltage/encoder populate, and the full ROS path (`/motor` -> `pit_node` -> Teensy) actuates the ESC and servo from an Xbox controller (`/imu/lsm9ds1` at 151 Hz, no CRC/resync errors). `require_crc` stays `false` on the Pi side pending a longer soak of the CRC path.
+- **Service restart after the udev rename.** A `racecar-teleop` instance started before this build holds the pre-v0.3.0 environment and pins `pit_node` to the old `/dev/serial0` (absent on Ubuntu), retry-looping without ever opening the UART; the watchdog does not correct a bad config path. After installing the `/dev/neo-pit-pcb` udev rule, run `sudo systemctl restart racecar-teleop` so the launch re-sources the current overlay.
 - **IMU calibration unverified.** `pit.yaml` `imu.*_axis_order/sign` and `gyro_scale`/`mag_scale` default to pass-through and must be checked against the LSM9DS1 mounting on the PCB and the units the firmware's Adafruit driver emits.
 
 ## [0.2.2] - 2026-07-05

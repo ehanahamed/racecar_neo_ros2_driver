@@ -40,11 +40,12 @@ EasySMX ─→ joy_node ─→ gamepad_node ──┐
 ```
 
 Sensor and ML nodes publish independently:
-- `/camera/forward` (sensor_msgs/Image): RealSense D435i color stream, remapped onto the forward-camera topic
-- `/camera/depth/image_rect_raw`, `/camera/imu` (sensor_msgs/Image, sensor_msgs/Imu): RealSense D435i depth and camera IMU
-- `/imu`, `/mag` (sensor_msgs/Imu, MagneticField)
+- `/camera/color`, `/camera/depth` (sensor_msgs/Image): RealSense D435i color and depth streams
+- `/imu/realsense` (sensor_msgs/Imu): RealSense D435i IMU, remapped from `/camera/imu`
+- `/imu/lsm9ds1`, `/mag` (sensor_msgs/Imu, MagneticField): LSM9DS1 on the NEO-PIT board, republished from `pit_node` telemetry
+- `/imu/fused` (sensor_msgs/Imu): `imu_fusion_node` blends `/imu/realsense` and `/imu/lsm9ds1` (single-source passthrough when one is live)
 - `/scan` (sensor_msgs/LaserScan)
-- `/edgetpu/inference` (vision_msgs/Detection2DArray) — `edgetpu_node` consumes `/camera/forward`
+- `/edgetpu/inference` (vision_msgs/Detection2DArray): `edgetpu_node` consumes `/camera/color`
 
 Display node subscribes:
 - `/dotmatrix/text` (std_msgs/String) — renders user messages; falls back to a mode glyph (IDLE / TELEOP / AUTO) tied to the gamepad state
