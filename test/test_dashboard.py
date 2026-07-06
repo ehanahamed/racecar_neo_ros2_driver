@@ -94,20 +94,20 @@ class TestSystemHealth:
     """RTC battery + Pi under-voltage are slow-changing diagnostics."""
 
     def test_classify_rtc_above_threshold_is_healthy(self, dashboard):
-        status, label = dashboard._classify_rtc(3.29)
+        status, label = dashboard._classify_rtc(2.95)
         assert status == 'healthy'
-        assert '3.29' in label
+        assert '2.95' in label
 
     def test_classify_rtc_borderline_is_stale(self, dashboard):
-        # 2.85 V → between RTC_LOW (2.7) and RTC_OK (3.0) → warn.
-        status, label = dashboard._classify_rtc(2.85)
+        # 2.75 V → between RTC_LOW (2.7) and RTC_OK (2.8) → warn.
+        status, label = dashboard._classify_rtc(2.75)
         assert status == 'stale'
-        assert 'replace soon' in label
+        assert 'recharge soon' in label
 
     def test_classify_rtc_below_low_is_dead(self, dashboard):
         status, label = dashboard._classify_rtc(2.5)
         assert status == 'dead'
-        assert 'REPLACE NOW' in label
+        assert 'RECHARGE NOW' in label
 
     def test_classify_rtc_none_is_dead(self, dashboard):
         status, label = dashboard._classify_rtc(None)

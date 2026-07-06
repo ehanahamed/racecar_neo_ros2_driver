@@ -343,7 +343,9 @@ class TestDotMatrix:
 
 @pytest.mark.hardware
 class TestRTC:
-    BATT_MIN_VOLTS = 3.0
+    # Rechargeable backup cell, usable 2.7-3.0 V. 2.7 V is the PCF85063 RTC's
+    # own floor (clock resets below it), so it is the recharge line.
+    BATT_MIN_VOLTS = 2.7
 
     def _read_batt_volts(self):
         """Return RTC battery voltage in volts, or None if vcgencmd is unusable."""
@@ -374,9 +376,10 @@ class TestRTC:
                 "isn't a Pi 5."
             )
         assert volts >= self.BATT_MIN_VOLTS, (
-            f'RTC backup battery at {volts:.2f}V (threshold '
-            f'{self.BATT_MIN_VOLTS}V). Replace the CR2032 cell on the Pi 5 '
-            f'RTC connector — without it the clock resets on every power-off.'
+            f'RTC backup battery at {volts:.2f}V (floor '
+            f'{self.BATT_MIN_VOLTS}V). Recharge the Pi 5 RTC backup cell '
+            f'(usable 2.7-3.0 V) — below 2.7 V the clock resets on every '
+            f'power-off.'
         )
 
 

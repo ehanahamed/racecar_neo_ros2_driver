@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-07-06
+
+### Changed
+
+- **RTC backup battery thresholds** (`scripts/dashboard.py`, `test/test_hardware.py`) retargeted for the rechargeable backup cell (usable 2.7-3.0 V) that replaces the CR2032 (3.0-3.3 V). The dashboard `healthy` line drops from 3.0 V to 2.8 V; `TestRTC.BATT_MIN_VOLTS` drops from 3.0 V to 2.7 V (the PCF85063 RTC's own floor, below which the clock resets regardless of chemistry). Dashboard labels change from "replace" to "recharge". Fixes the `TestRTC.test_battery_above_threshold` false failure at a normal 3.0 V charge.
+
 ## [0.3.1] - 2026-07-06
 
 ### Fixed
