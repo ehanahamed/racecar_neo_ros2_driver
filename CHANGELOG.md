@@ -2,6 +2,96 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.3.0] - 2026-07-05
+
+Driver-side migration to the NEO-PIT drive controller (Teensy 4.1 PCB, repo `neo-pit-pcb` / firmware `racecar-pit-firmware`), which replaces the Pololu Maestro and moves the LSM9DS1 IMU, INA226 power sensor, and hall encoder onto the board. The Pi now speaks a binary UART protocol to the Teensy instead of driving the Maestro over USB and reading the IMU over I2C. Command semantics are unchanged: `/drive` stays normalized `[-1, 1]`, mapped to servo/ESC PWM on the Teensy (open-loop passthrough).
+
+Verified end-to-end on-robot (2026-07-06, wheels up): with the paired `racecar-pit-firmware` flashed, an Xbox controller drives the car through the mux to the ESC and servo, and `/imu/lsm9ds1` streams live LSM9DS1 telemetry. See Notes.
+
+### Added
+
+- **`pit_node`** (`racecar_neo_ros2_driver/pit_node.py`) owns the Pi/Teensy UART on `/dev/neo-pit-pcb` (stable udev symlink to the GPIO UART, `ttyAMA0` on Pi 5 / Ubuntu). Subscribes `/motor` and streams command frames at 60 Hz (normalized `[-1, 1]`, per-axis `steering_sign`/`speed_sign`, neutral on a stale command past `command_timeout_sec`); reads telemetry and republishes the LSM9DS1 as `/imu/lsm9ds1` + `/mag` (both topic names are parameters), which `imu_fusion_node` blends with the RealSense `/imu/realsense` into `/imu/fused`. Battery/current, encoder, and RC channels are decoded but not yet published. Reconnects on device loss; sends neutral on shutdown.
+- **`pit_protocol`** (`racecar_neo_ros2_driver/pit_protocol.py`) encodes and decodes the wire format from firmware `packets.h` (little-endian, packed): telemetry 94 B magic `0xDEADBEEF`, command 4 B magic `0xBEEFDEAD` + 470 B body, CRC-16/CCITT-FALSE. Pure functions, no ROS or serial dependencies.
+- **`config/pit.yaml`**, **`launch/pit.launch.py`** (watchdog restart target).
+- **Tests**: `test/test_pit_protocol.py` (17) and `test/test_pit_node.py` (10) cover byte layout, CRC, framing and resync, and the IMU transforms.
+
+### Changed
+
+- **`teleop.launch.py`**: `pit` replaces `pwm` in the always-on control pipeline; the standalone `imu` subsystem is removed (the IMU now arrives via `pit_node` telemetry).
+- **`watchdog.py` / `dashboard.py`**: supervise and monitor `pit` (`/dev/neo-pit-pcb`) in place of `pwm` (`/dev/maestro`) and the standalone `imu` node.
+
+### Removed
+
+- The Pololu Maestro drive path and the I2C IMU node, now superseded by `pit_node` and the Teensy: `pwm_node`, `maestro.py`, `imu_node`, `config/pwm.yaml`, `launch/pwm.launch.py`, `launch/imu.launch.py`, their unit tests, the `/dev/maestro` udev rule, and the `TestMaestro` / Pi-side `TestLSM9DS1` hardware checks. The `lsm9ds1_cal.yaml` / `lsm9ds1_mag_cal.yaml` calibration files stay; `pit_node` reads them.
+
+### Notes
+
+- **Firmware.** The paired `racecar-pit-firmware` (branch `feature/drive-telemetry`, firmware PR #1) is on-robot verified: telemetry CRC valid, IMU/voltage/encoder populate, and the full ROS path (`/motor` -> `pit_node` -> Teensy) actuates the ESC and servo from an Xbox controller (`/imu/lsm9ds1` at 151 Hz, no CRC/resync errors). `require_crc` stays `false` on the Pi side pending a longer soak of the CRC path.
+- **Service restart after the udev rename.** A `racecar-teleop` instance started before this build holds the pre-v0.3.0 environment and pins `pit_node` to the old `/dev/serial0` (absent on Ubuntu), retry-looping without ever opening the UART; the watchdog does not correct a bad config path. After installing the `/dev/neo-pit-pcb` udev rule, run `sudo systemctl restart racecar-teleop` so the launch re-sources the current overlay.
+- **IMU calibration unverified.** `pit.yaml` `imu.*_axis_order/sign` and `gyro_scale`/`mag_scale` default to pass-through and must be checked against the LSM9DS1 mounting on the PCB and the units the firmware's Adafruit driver emits.
+
+## [0.2.2] - 2026-07-05
+
+Offline Intel RealSense D435i firmware flashing for airgapped fleet units. The D435i IMU needs firmware >= 5.17.0.9 to stream on the Pi 5's xHCI USB controller (older firmware dies with `Motion Module force pause`); camera firmware lives in the camera's own flash, not on the disk, so cloning the golden image neither carries the update to another camera nor breaks an already-updated one. Each unit must be flashed individually, and airgapped units cannot fetch the image at flash time.
+
+### Added
+
+- **`scripts/flash_realsense_offline.sh`** and **`racecar setup realsense`** flash the D435i from a locally-staged image with no network access. The `.bin` (default `/opt/racecar/firmware/D4XX_FW_Image-<version>.bin`, staged once into the golden image before cloning) and `rs-fw-update` both travel in the clone; the tool reads the local `.bin` and pushes it over USB. Idempotent (a camera already at the target `5.17.0.9` is a no-op), reports current-vs-target with `--check`, targets one camera by `--serial` when several are attached, falls back to DFU recovery mode on a failed normal-mode flash, and re-verifies the version afterward. Target version and staging dir override via `--version`/`--fw-dir` or `RACECAR_RS_FW_VERSION`/`RACECAR_RS_FW_DIR`.
+- **Tests**: `flash_realsense_offline.sh` added to the standalone-script sanity set (`test_setup_scripts.py`); two `racecar setup realsense` dispatch tests in `test_racecar_tool.py`.
+
+### Changed
+
+- **`docs/realsense_topics.md`**: added the airgapped fleet-flash procedure and corrected the `rs-fw-update` library-path note. `sudo` strips `LD_*` from the environment even with `-E`, so the ROS-packaged binary needs `LD_LIBRARY_PATH` passed explicitly via `sudo env`; enumeration and post-flash verify run as the invoking user (the normal `0b3a` device is reachable via the `video`/`plugdev` groups) and only the flash itself uses `sudo`.
+
+### Notes
+
+- Verified on-robot: flashed unit serial 943222070134 from 5.11.1.100 to 5.17.0.9, then brought the camera up and confirmed depth, color, and IMU all publish. The IMU (`/camera/camera/accel|gyro|imu`) streams real data post-flash (accel reads the gravity vector, ~9.1 m/s2) where the old firmware published nothing. A transient `Motion Module failure / HID set_power` warning still fires once at init on the Pi 5 xHCI combo but does not stop the stream.
+
+## [0.2.1] - 2026-07-05
+
+Refines the RealSense integration: the color stream moves to `/camera/color`, depth is exposed on `/camera/depth` as a working API, and the RealSense IMU feeds a fusion node so the Teensy LSM9DS1 can join later.
+
+### Added
+
+- `imu_fusion_node` (with `launch/imu_fusion.launch.py` and `config/imu_fusion.yaml`) merges `/imu/realsense` and `/imu/lsm9ds1` into `/imu/fused`, averaging when both are fresh and passing the single source through otherwise. The RealSense IMU is remapped from `/camera/imu` to `/imu/realsense`.
+
+### Changed
+
+- Color is remapped to `/camera/color` and depth to `/camera/depth` (was `/camera/forward` and the RealSense depth default); decimation is disabled so depth stays 640x480. `edgetpu.yaml`, `watchdog.py`, and `dashboard.py` follow the new topics, and `teleop.launch.py` runs `imu_fusion` in place of the standalone `imu`.
+
+### Fixed
+
+- `setup_realsense.sh` now chmods the motion module's `enable_sensor` at the HID-sensor node, not just the `iio:device*` attributes. Without it the accelerometer failed with "Failed to enable_sensor ... Permission denied", read zeros, and crashed the camera node.
+
+## [0.2.0] - 2026-07-05
+
+Camera subsystem moves to an Intel RealSense D435i as the single forward camera, retiring the Logitech BRIO / Arducam gscam hybrid. The RealSense color stream is published on `/camera/forward`, the topic `edgetpu_node` and the student library (`camera_real.py`) already read, so the forward-camera contract is unchanged while the physical source and the depth/IMU streams are new.
+
+### Added
+
+- **`launch/realsense.launch.py`** brings up the D435i via `realsense2_camera` (`rs_launch.py` with Pi 5 tuned profiles) and a `SetRemap` that publishes the color stream as `/camera/forward`. Depth is on `/camera/depth/image_rect_raw`, the camera IMU on `/camera/imu`. A pre-launch `fix-realsense-imu.sh` sets the HID-sensor IIO permissions the D435i IMU needs on the Pi 5.
+- **`scripts/setup_realsense.sh`** (phase 8 of `setup_all.sh`) installs `realsense2_camera` and the IMU permission fix (script, udev rule, boot service).
+- **`realsense2_camera`** dependency in `package.xml`.
+- **`docs/realsense_topics.md`** documents the streams, profiles, and known issues.
+- RealSense hardware check in `test/test_hardware.py` (USB `8086:0b3a`).
+
+### Changed
+
+- **`/camera/forward` is now the RealSense color stream** rather than the BRIO gscam feed; `edgetpu_node` and the student library need no change. The `realsense` entries in `watchdog.py` and `dashboard.py` track `/camera/forward`.
+- **`teleop.launch.py`** launches `realsense` in place of `camera_forward` + `camera_backward`.
+
+### Removed
+
+- **Logitech BRIO forward camera and Arducam B0578 backward camera**, including `launch/camera_forward.launch.py`, `launch/camera_backward.launch.py`, and the four `config/camera_{forward,backward}*.yaml` files. There is no backward camera; the `/camera/backward` topic is gone.
+- **`gscam` dependency** and **`scripts/patch_gscam.sh`** (the gscam overlay build/patch phase). `setup_all.sh` is now eleven phases.
+- **`/dev/cam_forward` and `/dev/cam_backward`** udev symlinks.
+
+### Notes
+
+- `realsense2_camera` is not installable on the dev workstation, so the D435i launch and the `SetRemap` onto `/camera/forward` are verified by build + lint here and need a bench check on the Pi. If `SetRemap` does not propagate into the included `rs_launch.py`, the fallback is a `topic_tools relay` (already an apt dependency) or a direct `realsense2_camera_node` with a remapping.
+
 ## [0.1.0] — 2026-05-13
 
 QoL: give the `racecar` tool authority over which `~/jupyter_ws/<folder>/library/` is on Python's `sys.path`, so student scripts (e.g. `labs/demo.py`) can `import racecar_core` without a manually-placed `.pth` or `sys.path` hack. Matches the sim installer's existing convention (a `racecar_student.pth` in site-packages) but anchored to user site-packages since the Pi has no venv.

@@ -159,11 +159,17 @@ __RC_SVC_HELP__
             case "$phase" in
                 "")
                     echo "usage: racecar setup <phase>" >&2
-                    echo "  phases: all, networking" >&2
+                    echo "  phases: all, networking, realsense" >&2
                     return 2
                     ;;
                 all)
                     bash "$pkg_dir/scripts/setup_all.sh" "$@"
+                    ;;
+                realsense)
+                    # Offline per-machine firmware flash for airgapped fleet units.
+                    # Reads the staged .bin from /opt/racecar/firmware (no network);
+                    # idempotent, skips a camera already at the target version.
+                    bash "$pkg_dir/scripts/flash_realsense_offline.sh" "$@"
                     ;;
                 networking)
                     # Persist any --flag values to ~/.config/racecar/networking.env
@@ -268,7 +274,7 @@ __RC_NET_HELP__
                     ;;
                 *)
                     echo "racecar setup: unknown phase '$phase'" >&2
-                    echo "  phases: all, networking" >&2
+                    echo "  phases: all, networking, realsense" >&2
                     return 2
                     ;;
             esac
@@ -445,7 +451,7 @@ __RC_CLEANUP_HELP__
 
             # ----- Process inventory -----
             # Match any process whose cmdline mentions the racecar stack.
-            local pattern='racecar_neo_ros2_driver|gscam_node|sllidar_node|ros2 launch racecar|sg dialout.*racecar'
+            local pattern='racecar_neo_ros2_driver|realsense2_camera_node|sllidar_node|ros2 launch racecar|sg dialout.*racecar'
             local matches
             matches=$(ps -eo pid,user,cmd --no-headers | grep -E "$pattern" | grep -v 'grep\|racecar cleanup' || true)
 
@@ -556,10 +562,10 @@ __RC_SELFTEST_HELP__
 
         status)
             echo "=== USB peripherals ==="
-            lsusb | grep -iE "pololu|silicon labs|logitech|microdia|arducam|global unichip|google" || echo "  (none of the expected USB devices found)"
+            lsusb | grep -iE "silicon labs|intel|global unichip|google" || echo "  (none of the expected USB devices found)"
             echo
             echo "=== Stable device symlinks ==="
-            for s in maestro lidar cam_forward cam_backward; do
+            for s in neo-pit-pcb lidar; do
                 if [[ -e "/dev/$s" ]]; then
                     printf "  /dev/%-14s -> %s\n" "$s" "$(readlink -f /dev/$s)"
                 else
@@ -592,10 +598,10 @@ Commands:
                         Forwards args, e.g. `racecar teleop edgetpu_enable:=false`.
     launch <name>       Shortcut for `ros2 launch racecar_neo_ros2_driver <name>.launch.py`.
                         Examples: racecar launch dotmatrix
-                                  racecar launch camera_forward
+                                  racecar launch realsense
                                   racecar launch edgetpu
     clear --dmatrix     Flash + clear the MAX7219 dot matrix display.
-    udev                Re-install the udev rules (refreshes /dev/maestro etc.).
+    udev                Re-install the udev rules (refreshes /dev/neo-pit-pcb etc.).
     watchdog            Run the node watchdog (restart-on-failure supervisor).
                         Monitors control + sensor nodes; logs to
                         ~/logs/latest/watchdog.log. Assumes teleop runs separately.
@@ -607,6 +613,11 @@ Commands:
                                            --ap-addr=CIDR (default 10.42.0.1/24)
                                            --eth-static=CIDR (default 192.168.52.200/24)
                                            --show / --reset
+                          realsense    — flash D435i firmware from the locally-staged
+                                         image (offline; for airgapped units). Reads
+                                         /opt/racecar/firmware; idempotent. Flags:
+                                           --check (report only)  --force
+                                           --version X.Y.Z.W  --serial SN  --fw-dir DIR
     service <action>    systemd service control. Actions:
                           install              setup_services.sh (drop + enable units)
                           start [name]         default: teleop (watchdog follows)
@@ -701,9 +712,11 @@ _racecar_complete() {
             ;;
         setup)
             if [[ $COMP_CWORD -eq 2 ]]; then
-                COMPREPLY=( $(compgen -W "all networking" -- "$cur") )
+                COMPREPLY=( $(compgen -W "all networking realsense" -- "$cur") )
             elif [[ "${COMP_WORDS[2]}" == "networking" ]]; then
                 COMPREPLY=( $(compgen -W "--ssid= --psk= --channel= --ap-addr= --eth-static= --show --reset --help" -- "$cur") )
+            elif [[ "${COMP_WORDS[2]}" == "realsense" ]]; then
+                COMPREPLY=( $(compgen -W "--check --force --version --serial --fw-dir --help" -- "$cur") )
             fi
             ;;
         service)

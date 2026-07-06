@@ -1,0 +1,54 @@
+pit_node:
+  ros__parameters:
+    # Pi <-> Teensy UART. The PIT board wires the Pi's built-in UART (Serial1,
+    # GPIO 14/15) to the Teensy. /dev/neo-pit-pcb is a stable udev symlink to the
+    # GPIO UART (ttyAMA0 on Pi 5 / Ubuntu); see scripts/udev/99-racecar.rules.
+    serial_port: "/dev/neo-pit-pcb"
+    baud: 921600
+
+    # Command stream. Normalized [-1, 1] passthrough; the Teensy maps to PWM.
+    command_rate_hz: 60.0        # matches firmware UART rx_freq
+    command_timeout_sec: 0.5     # stale /motor -> send neutral (matches mux)
+    reconnect_period_sec: 2.0
+
+    # Per-axis polarity, corrected on hardware without reflashing firmware.
+    # +speed = forward, +steering_angle = left (ackermann convention on /motor).
+    steering_sign: 1
+    speed_sign: 1
+
+    # Firmware does not compute the CRC-16 yet; keep false until it does.
+    require_crc: false
+
+    # ---- IMU republish (/imu/lsm9ds1, /mag) ----
+    # imu_fusion_node blends /imu/lsm9ds1 with /imu/realsense into /imu/fused,
+    # the single IMU the library reads.
+    frame_id: imu_link
+    publish_mag: true
+    imu_topic: "/imu/lsm9ds1"
+    mag_topic: "/mag"
+
+    # UNVERIFIED against the LSM9DS1 mounting on the PIT PCB. Defaults pass the
+    # raw firmware axes straight through. The physical-axis convention students
+    # expect (accel x=front, y=right, z=up; mag x=back, y=right, z=up) is in
+    # racecar-neo-library physics.py; set order/sign here to match on hardware.
+    imu.accel_gyro_axis_order: [0, 1, 2]
+    imu.accel_gyro_axis_sign: [1.0, 1.0, 1.0]
+    imu.mag_axis_order: [0, 1, 2]
+    imu.mag_axis_sign: [1.0, 1.0, 1.0]
+
+    # Unit scales for the firmware's Adafruit_LSM9DS1 getEvent() output.
+    # accel is m/s^2 (scale 1.0). gyro: set 0.01745329 if the library reports
+    # deg/s. mag: firmware uT -> Tesla.
+    imu.accel_scale: 1.0
+    imu.gyro_scale: 1.0
+    imu.mag_scale: 1.0e-6
+
+    # Calibration biases. Overridden by lsm9ds1_cal.yaml / lsm9ds1_mag_cal.yaml
+    # when those are also passed (same parameter keys as the old imu_node).
+    accelerometer.bias: [0.0, 0.0, 0.0]
+    gyroscope.bias: [0.0, 0.0, 0.0]
+    magnetometer.hard_iron_bias: [0.0, 0.0, 0.0]
+    magnetometer.soft_iron_matrix.data:
+      [1.0, 0.0, 0.0,
+       0.0, 1.0, 0.0,
+       0.0, 0.0, 1.0]

@@ -39,7 +39,7 @@ echo "==> [4/11] raspi-config flags (I2C, SPI, serial)"
 bash "$SCRIPT_DIR/setup_raspi_config.sh"
 
 echo
-echo "==> [5/11] udev rules (stable /dev/maestro, /dev/lidar, /dev/cam_*)"
+echo "==> [5/11] udev rules (stable /dev/neo-pit-pcb, /dev/lidar)"
 bash "$SCRIPT_DIR/setup_udev.sh"
 
 echo
@@ -51,8 +51,8 @@ echo "==> [7/11] Coral EdgeTPU userspace"
 bash "$SCRIPT_DIR/setup_coral.sh"
 
 echo
-echo "==> [8/11] gscam overlay (camera memory-leak patch)"
-bash "$SCRIPT_DIR/patch_gscam.sh"
+echo "==> [8/11] RealSense D435i driver + Pi 5 IMU fix"
+bash "$SCRIPT_DIR/setup_realsense.sh"
 
 echo
 echo "==> [9/11] Workspace build"

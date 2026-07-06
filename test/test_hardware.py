@@ -67,34 +67,6 @@ def _user_in_group(name):
 
 
 # ---------------------------------------------------------------------------
-# Pololu Maestro — drive ESC (ch 0) + steering servo (ch 1)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.hardware
-class TestMaestro:
-    DEVICE = '/dev/maestro'
-    POLOLU_USB_ID = '1ffb:0089'
-
-    def test_device_symlink_exists(self):
-        assert os.path.exists(self.DEVICE), (
-            f'{self.DEVICE} symlink not present. Run `bash scripts/setup_udev.sh` '
-            f'to install the udev rules, then unplug+replug the Maestro. '
-            f'Verify with `lsusb | grep -i pololu`.'
-        )
-
-    def test_maestro_enumerated(self):
-        assert _lsusb_match(self.POLOLU_USB_ID), (
-            'Pololu Maestro not detected via lsusb. Check the USB cable.'
-        )
-
-    def test_user_in_dialout(self):
-        assert _user_in_group('dialout'), (
-            'User not in dialout group. Fix: '
-            'sudo usermod -aG dialout $USER and log out + back in.'
-        )
-
-
-# ---------------------------------------------------------------------------
 # RPLIDAR — 2D LIDAR
 # ---------------------------------------------------------------------------
 
@@ -150,96 +122,83 @@ class TestGamepad:
 
 
 # ---------------------------------------------------------------------------
-# LSM9DS1 IMU — accel/gyro at 0x6B, magnetometer at 0x1E on I²C bus 1
+# RealSense D435i
 # ---------------------------------------------------------------------------
 
 @pytest.mark.hardware
-class TestLSM9DS1:
-    BUS = 1
-    ACCEL_GYRO_ADDR = 0x6B
-    MAGNETOMETER_ADDR = 0x1E
+class TestRealSense:
+    """Intel RealSense D435i — depth + color + IMU over USB 3.x."""
 
-    def test_i2c_bus_present(self):
-        path = f'/dev/i2c-{self.BUS}'
-        assert os.path.exists(path), (
-            f'{path} not present. Enable I²C: '
-            'sudo raspi-config nonint do_i2c 0 && sudo reboot.'
-        )
-
-    def test_user_in_i2c_group(self):
-        assert _user_in_group('i2c'), (
-            'User not in i2c group. Fix: '
-            'sudo usermod -aG i2c $USER and log out + back in.'
-        )
-
-    def test_accel_gyro_responds(self):
-        assert _i2c_probe(self.BUS, self.ACCEL_GYRO_ADDR), (
-            f'No device at I²C bus {self.BUS} address '
-            f'0x{self.ACCEL_GYRO_ADDR:02x} (LSM9DS1 accel/gyro). Check '
-            f'wiring and that the IMU board is powered.'
-        )
-
-    def test_magnetometer_responds(self):
-        assert _i2c_probe(self.BUS, self.MAGNETOMETER_ADDR), (
-            f'No device at I²C bus {self.BUS} address '
-            f'0x{self.MAGNETOMETER_ADDR:02x} (LSM9DS1 magnetometer). Check '
-            f'wiring.'
-        )
-
-
-# ---------------------------------------------------------------------------
-# Forward camera — Logitech BRIO over V4L2
-# ---------------------------------------------------------------------------
-
-@pytest.mark.hardware
-class TestForwardCamera:
-    DEVICE = '/dev/cam_forward'
-    BRIO_USB_ID = '046d:085e'
-
-    def test_device_symlink_exists(self):
-        assert os.path.exists(self.DEVICE), (
-            f'{self.DEVICE} symlink not present. Run `bash scripts/setup_udev.sh` '
-            f'and unplug+replug the BRIO. Check `lsusb | grep -i logitech`.'
-        )
-
-    def test_brio_enumerated(self):
-        assert _lsusb_match(self.BRIO_USB_ID), (
-            f'Logitech BRIO (USB {self.BRIO_USB_ID}) not detected.'
-        )
-
-    def test_v4l2_device_enumerated(self):
-        try:
-            out = subprocess.run(
-                ['v4l2-ctl', '--list-devices'],
-                capture_output=True, text=True, timeout=5,
-            ).stdout
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pytest.fail('v4l2-ctl missing — `sudo apt install v4l-utils`.')
-        assert '/dev/video' in out, (
-            'No V4L2 video devices enumerated. Plug in the forward camera; '
-            'check `lsusb | grep -i logitech`.'
-        )
-
-
-# ---------------------------------------------------------------------------
-# Backward camera — Arducam B0578
-# ---------------------------------------------------------------------------
-
-@pytest.mark.hardware
-class TestArducam:
-    DEVICE = '/dev/cam_backward'
-    USB_ID = '0c45:0578'
-
-    def test_device_symlink_exists(self):
-        assert os.path.exists(self.DEVICE), (
-            f'{self.DEVICE} symlink not present. Run `bash scripts/setup_udev.sh` '
-            f'and unplug+replug the Arducam.'
-        )
+    USB_ID = '8086:0b3a'
 
     def test_usb_present(self):
         assert _lsusb_match(self.USB_ID), (
-            f'Arducam B0578 (USB {self.USB_ID}) not detected. Check the '
-            f'rear camera USB cable.'
+            f'RealSense D435i (USB {self.USB_ID}) not detected on the USB bus. '
+            f'Check the USB 3.0 cable and port.'
+        )
+
+    def test_v4l2_devices_exist(self):
+        out = subprocess.run(
+            ['v4l2-ctl', '--list-devices'],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+        assert 'RealSense' in out, (
+            'No RealSense V4L2 devices found. '
+            'Check the USB connection and try: rs-enumerate-devices --compact'
+        )
+
+    def test_rs_enumerate(self):
+        result = subprocess.run(
+            ['rs-enumerate-devices', '--compact'],
+            capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0, (
+            'rs-enumerate-devices failed. Install: bash scripts/setup_realsense.sh'
+        )
+        assert 'D435I' in result.stdout or 'D435i' in result.stdout, (
+            f'D435i not found in rs-enumerate-devices output:\n{result.stdout}'
+        )
+
+    def test_usb3_connection(self):
+        out = subprocess.run(
+            ['rs-enumerate-devices', '--compact'],
+            capture_output=True, text=True, timeout=10,
+        ).stdout
+        if 'Usb Type Descriptor' in out:
+            assert '3.' in out.split('Usb Type Descriptor')[1].split('\n')[0], (
+                'RealSense is not on a USB 3.x port. '
+                'Depth + color + IMU at full rate requires USB 3.0+.'
+            )
+
+    def test_imu_permissions(self):
+        iio_base = '/sys/bus/iio/devices'
+        if not os.path.isdir(iio_base):
+            pytest.skip('No IIO subsystem (not running on Pi 5?)')
+        iio_devices = [
+            os.path.join(iio_base, d)
+            for d in os.listdir(iio_base)
+            if d.startswith('iio:device')
+        ]
+        if not iio_devices:
+            pytest.skip('No IIO devices found (RealSense IMU may not be enumerated yet)')
+        bad = []
+        for dev in iio_devices:
+            buf_enable = os.path.join(dev, 'buffer', 'enable')
+            if os.path.exists(buf_enable) and not os.access(buf_enable, os.W_OK):
+                bad.append(buf_enable)
+        assert not bad, (
+            f'IMU IIO permissions not fixed ({len(bad)} file(s) not writable). '
+            'Fix: sudo /usr/local/bin/fix-realsense-imu.sh\n'
+            'Or run: bash scripts/setup_realsense.sh'
+        )
+
+    def test_imu_fix_script_installed(self):
+        script = '/usr/local/bin/fix-realsense-imu.sh'
+        assert os.path.isfile(script), (
+            f'{script} not found. Run: bash scripts/setup_realsense.sh'
+        )
+        assert os.access(script, os.X_OK), (
+            f'{script} is not executable. Fix: sudo chmod +x {script}'
         )
 
 

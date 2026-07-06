@@ -84,7 +84,7 @@ def test_selftest_without_target_errors():
 
 
 def test_selftest_rejects_unknown_flag():
-    result = _run('selftest', '--maestro')
+    result = _run('selftest', '--bogus')
     assert result.returncode == 2
     assert 'unknown flag' in result.stderr
 
@@ -174,6 +174,19 @@ class TestSetup:
         result = _run('setup', 'networking', '--gloryhole')
         assert result.returncode == 2
         assert 'unknown flag' in result.stderr
+
+    def test_realsense_listed_as_phase(self):
+        # Unknown-phase error and no-phase usage should both advertise realsense.
+        assert 'realsense' in _run('setup').stderr
+        assert 'realsense' in _run('setup', 'nope').stderr
+
+    def test_realsense_help_dispatches_to_flash_script(self):
+        # --help hits the flash script's own usage (no hardware needed) and
+        # lists its flags. Confirms `racecar setup realsense` wires through.
+        result = _run('setup', 'realsense', '--help')
+        assert result.returncode == 0
+        for flag in ('--check', '--force', '--version', '--serial', '--fw-dir'):
+            assert flag in result.stdout
 
     def test_networking_show_with_no_persisted_file(self, tmp_path, monkeypatch):
         # --show with no $HOME/.config/racecar/networking.env should report

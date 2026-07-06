@@ -36,32 +36,54 @@ flip to `[ ]` if you spot a regression, and **stop**.
 
 ## 1. Launch helper sanity — all 9 launch files still parse
 
-The audit collapsed 9 launch files behind `single_node_launch()` in
-`racecar_neo_ros2_driver/launch_common.py`. A regression here would prevent
-the watchdog from restarting any node.
+The audit collapsed the per-node launch files behind `single_node_launch()` in
+`racecar_neo_ros2_driver/launch_common.py`; `imu` and `realsense` are outliers
+(imu loads two YAML files, realsense wraps `realsense2_camera`). A regression
+here would prevent the watchdog from restarting any node.
 
-- [X] Every per-node launch file shows its config arg
+- [X] Every collapsed per-node launch file shows its config arg
   ```sh
-  for lf in pwm mux throttle gamepad lidar dotmatrix edgetpu camera_forward camera_backward; do
+  for lf in pwm mux throttle gamepad lidar dotmatrix edgetpu; do
       echo "=== $lf ==="
       ros2 launch racecar_neo_ros2_driver "${lf}.launch.py" --show-args | head -3
   done
   ```
   Expected: each prints `'<name>_config':` as the first arg. No tracebacks.
 
-- [X] IMU launch (only outlier — two YAML param files) still works
+- [X] IMU launch (outlier, two YAML param files) still works
   ```sh
   ros2 launch racecar_neo_ros2_driver imu.launch.py --show-args
   ```
   Expected: shows both `imu_cal` and `imu_mag_cal` args.
 
+- [ ] RealSense launch (outlier, wraps `realsense2_camera`) still parses
+  ```sh
+  ros2 launch racecar_neo_ros2_driver realsense.launch.py --show-args
+  ```
+  Expected: shows `pointcloud_enable`, `align_depth_enable`, `depth_profile`,
+  `color_profile`. No tracebacks.
+
+- [ ] RealSense is the only camera: enumerates on USB and publishes the
+      forward-camera contract (camera plugged in)
+  ```sh
+  lsusb | grep -i "8086:0b3a"                 # D435i on USB 3.x
+  ros2 launch racecar_neo_ros2_driver realsense.launch.py &
+  sleep 8
+  ros2 topic hz /camera/forward --window 30   # color, remapped to forward
+  ros2 topic hz /camera/depth/image_rect_raw
+  ros2 topic hz /camera/imu
+  kill %1
+  ```
+  Expected: `lsusb` shows `8086:0b3a`; `/camera/forward` ~26 Hz,
+  `/camera/depth/image_rect_raw` ~15-30 Hz, `/camera/imu` ~200 Hz. No
+  `/camera/backward` topic and no `gscam` process anywhere.
+
 - [X] Teleop aggregator still resolves every subsystem
   ```sh
   ros2 launch racecar_neo_ros2_driver teleop.launch.py --show-args | grep _enable
   ```
-  Expected: 6 lines — `imu_enable`, `lidar_enable`, `camera_forward_enable`,
-  `camera_backward_enable`, `edgetpu_enable`, `dotmatrix_enable`, all
-  defaulting to `'true'`.
+  Expected: 5 lines: `imu_enable`, `lidar_enable`, `realsense_enable`,
+  `edgetpu_enable`, `dotmatrix_enable`, all defaulting to `'true'`.
 
 ## 2. Maestro device path — `/dev/maestro` not `/dev/ttyACM0`
 
@@ -332,12 +354,11 @@ state — run it from a wired (eth0) connection or the console.**
 
 ## 9. Bash hardening — `pipefail` is now set
 
-All 12 phase scripts + the orchestrator should have `set -eo pipefail`.
+All 11 phase scripts + the orchestrator should have `set -eo pipefail`.
 
 - [ ] Quick verify
   ```sh
-  grep -L pipefail scripts/setup_*.sh scripts/launch_teleop.sh \
-      scripts/patch_gscam.sh
+  grep -L pipefail scripts/setup_*.sh scripts/launch_teleop.sh
   ```
   Expected: **no output** (every script has it).
 

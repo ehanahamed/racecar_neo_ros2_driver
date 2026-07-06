@@ -30,15 +30,14 @@ RATE_WINDOW_SEC = 3.0
 # the card may go red without any recovery — surface that to the operator so
 # the asymmetry isn't silent.
 MONITORED = {
-    'pwm': {'topic': '/motor', 'label': 'PWM (Maestro)', 'supervised': True},
+    'pit': {'topic': '/imu/lsm9ds1', 'label': 'PIT board (drive + IMU)', 'supervised': True},
     'throttle': {'topic': '/motor', 'label': 'Throttle (clamping)', 'supervised': True},
     'mux': {'topic': '/mux_out', 'label': 'Mux (arbitrator)', 'supervised': True},
     'gamepad': {'topic': '/gamepad_drive', 'label': 'Gamepad', 'supervised': True},
-    'imu': {'topic': '/imu', 'label': 'LSM9DS1 IMU', 'supervised': True},
+    'imu_fusion': {'topic': '/imu/fused', 'label': 'IMU fusion', 'supervised': True},
     'lidar': {'topic': '/scan', 'label': 'RPLIDAR', 'supervised': True},
-    'camera_forward': {'topic': '/camera/forward', 'label': 'BRIO (forward)', 'supervised': True},
-    'camera_backward': {
-        'topic': '/camera/backward', 'label': 'Arducam (backward)', 'supervised': True},
+    'realsense': {
+        'topic': '/camera/color', 'label': 'RealSense D435i', 'supervised': True},
     'edgetpu': {'topic': '/edgetpu/inference', 'label': 'Coral EdgeTPU', 'supervised': False},
     'dotmatrix': {'topic': '/dotmatrix/pixels', 'label': 'Dot matrix', 'supervised': False},
 }
@@ -46,10 +45,12 @@ MONITORED = {
 RATE_TOPICS = [
     '/motor',
     '/mux_out',
-    '/imu',
+    '/imu/fused',
+    '/imu/realsense',
+    '/imu/lsm9ds1',
     '/scan',
-    '/camera/forward',
-    '/camera/backward',
+    '/camera/color',
+    '/camera/depth',
     '/edgetpu/inference',
 ]
 

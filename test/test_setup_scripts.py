@@ -21,7 +21,7 @@ PHASE_SCRIPTS = [
     'setup_udev.sh',
     'setup_dotmatrix.sh',
     'setup_coral.sh',
-    'patch_gscam.sh',
+    'setup_realsense.sh',
     'setup_workspace.sh',
     'setup_jupyter.sh',
     'setup_services.sh',
@@ -33,6 +33,7 @@ ORCHESTRATOR = 'setup_all.sh'
 # side-effects are too disruptive to include in a one-shot install.
 STANDALONE_SCRIPTS = [
     'setup_networking.sh',  # reconfigures wlan0; can drop SSH-over-WiFi sessions
+    'flash_realsense_offline.sh',  # per-machine camera firmware flash (airgapped)
 ]
 
 ALL_SCRIPTS = PHASE_SCRIPTS + [ORCHESTRATOR] + STANDALONE_SCRIPTS
@@ -251,7 +252,7 @@ class TestUdevRules:
         assert self.RULES_FILE.is_file(), f'{self.RULES_FILE} missing'
 
     @pytest.mark.parametrize('symlink', [
-        'maestro', 'lidar', 'cam_forward', 'cam_backward',
+        'neo-pit-pcb', 'lidar',
     ])
     def test_rules_define_symlink(self, symlink):
         text = self.RULES_FILE.read_text()
@@ -261,8 +262,6 @@ class TestUdevRules:
 
     @pytest.mark.parametrize('vid_pid', [
         ('10c4', 'ea60'),  # CP2102 (RPLIDAR)
-        ('046d', '085e'),  # Logitech BRIO
-        ('0c45', '0578'),  # Arducam B0578
         ('1a6e', '089a'),  # Coral pre-init
         ('18d1', '9302'),  # Coral post-init
     ])
@@ -272,6 +271,13 @@ class TestUdevRules:
         text = self.RULES_FILE.read_text()
         assert f'ATTRS{{idVendor}}=="{vid}"' in text, f'VID {vid} not matched'
         assert f'ATTRS{{idProduct}}=="{pid}"' in text, f'PID {pid} not matched'
+
+    def test_realsense_autosuspend_rule_present(self):
+        # RealSense D435i (USB 8086:0b3a). The autosuspend rule matches the usb
+        # device node directly, so it uses ATTR (singular), not ATTRS.
+        text = self.RULES_FILE.read_text()
+        assert 'ATTR{idVendor}=="8086"' in text, 'RealSense VID not matched'
+        assert 'ATTR{idProduct}=="0b3a"' in text, 'RealSense PID not matched'
 
     def test_lidar_rule_ignores_modemmanager(self):
         # ModemManager will probe any tty unless told otherwise. For the lidar's
@@ -285,15 +291,13 @@ class TestUdevRules:
             'lidar rule must set ID_MM_DEVICE_IGNORE=1 to block ModemManager probes'
         )
 
-    def test_maestro_rule_pins_command_interface(self):
-        # The Maestro exposes two CDC ACM interfaces (00 = command, 02 = aux TTL).
-        # The rule must pin interface 00 or /dev/maestro races between the two.
+    def test_neo_pit_rule_matches_gpio_uart(self):
+        # The NEO-PIT PCB is on the Pi's GPIO UART, which enumerates as ttyAMA0
+        # on Pi 5 / Ubuntu (there is no /dev/serial0). Pin the symlink to that
+        # kernel name so ttyAMA10 (the SoC debug UART) is never matched.
         text = self.RULES_FILE.read_text()
-        assert 'ENV{ID_VENDOR_ID}=="1ffb"' in text, 'Maestro VID not matched via ENV'
-        assert 'ENV{ID_USB_INTERFACE_NUM}=="00"' in text, (
-            'Maestro rule must pin ID_USB_INTERFACE_NUM=00 (command port). '
-            'Without this, /dev/maestro may bind to the wrong CDC interface.'
-        )
+        assert 'KERNEL=="ttyAMA0"' in text, 'neo-pit-pcb rule must match ttyAMA0'
+        assert 'SYMLINK+="neo-pit-pcb"' in text, 'neo-pit-pcb symlink rule missing'
 
 
 class TestHidNintendoBlacklist:

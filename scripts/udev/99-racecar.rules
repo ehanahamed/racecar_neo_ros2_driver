@@ -2,14 +2,11 @@
 # Installed to /etc/udev/rules.d/ by scripts/setup_udev.sh.
 # After install: sudo udevadm control --reload-rules && sudo udevadm trigger
 
-# Pololu Micro Maestro 6-Servo Controller (drive ESC + steering servo)
-# VID 1ffb:0089. The Maestro exposes two CDC ACM interfaces:
-# ID_USB_INTERFACE_NUM=00 is the command port, =02 is an auxiliary TTL serial
-# we don't use — match only the command port. Match on VID:PID rather than
-# serial so the rule works on any fleet unit (each Maestro has a different
-# factory serial; pinning to one was a per-machine portability bug fixed in
-# v0.0.9 during the new-machine audit).
-SUBSYSTEM=="tty", ENV{ID_VENDOR_ID}=="1ffb", ENV{ID_MODEL_ID}=="0089", ENV{ID_USB_INTERFACE_NUM}=="00", SYMLINK+="maestro", GROUP="dialout", MODE="0660"
+# NEO-PIT PCB (Teensy 4.1) drive controller on the Pi's GPIO UART (GPIO 14/15).
+# On Pi 5 / Ubuntu 24.04 that UART enumerates as ttyAMA0 (device-tree alias
+# serial0); Ubuntu does not create the RPi-OS /dev/serial0 symlink, so pin a
+# stable, self-documenting name here. ttyAMA10 is the separate SoC debug UART.
+SUBSYSTEM=="tty", KERNEL=="ttyAMA0", SYMLINK+="neo-pit-pcb", GROUP="dialout", MODE="0660"
 
 # RPLIDAR A3-class via CP2102 USB-UART bridge
 # VID 10c4:ea60. Serial "0001" is generic for CP2102; match by VID:PID only.
@@ -20,16 +17,10 @@ SUBSYSTEM=="tty", ENV{ID_VENDOR_ID}=="1ffb", ENV{ID_MODEL_ID}=="0089", ENV{ID_US
 # Observed in 2026-05-12 8h endurance test.
 SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ENV{ID_MM_DEVICE_IGNORE}="1", SYMLINK+="lidar", GROUP="dialout", MODE="0660"
 
-# Logitech BRIO Ultra HD (forward camera)
-# VID 046d:085e. Symlink only the v4l2 capture node (index 0). Match on VID:PID
-# only — per-unit serial pinning was a portability bug fixed in v0.0.9.
-SUBSYSTEM=="video4linux", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="085e", ATTR{index}=="0", SYMLINK+="cam_forward"
+# Intel RealSense D435i (forward camera: color + depth + IMU, RACECAR v2)
+# VID 8086:0b3a. Disable USB autosuspend to prevent disconnects during streaming.
+SUBSYSTEM=="usb", ATTR{idVendor}=="8086", ATTR{idProduct}=="0b3a", ATTR{power/autosuspend}="-1", ATTR{power/control}="on"
 
-# Arducam B0578 (backward camera)
-# VID 0c45:0578. Serial "SN001" is generic factory default; VID:PID is product-unique.
-SUBSYSTEM=="video4linux", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="0578", ATTR{index}=="0", SYMLINK+="cam_backward"
-# Disable USB autosuspend on the Arducam (prevents driver re-init storms)
-ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="0578", ATTR{power/autosuspend}="-1", ATTR{power/control}="on"
 
 # Coral EdgeTPU — non-root access in both pre-init and post-init USB IDs
 # Pre-init: 1a6e:089a (Global Unichip). Post-init (after firmware load): 18d1:9302 (Google).
