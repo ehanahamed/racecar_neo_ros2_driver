@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-07-06
+
+### Fixed
+
+- **`realsense.launch.py`**: dropped the launch-time `sudo /usr/local/bin/fix-realsense-imu.sh` call. Under the `racecar-teleop` systemd service there is no TTY, so `sudo` demanded a password and the process died with exit 1 on every launch. The D435i IMU sysfs permissions are already set at the root level by `setup_realsense.sh`'s udev rule (`99-realsense-imu.rules`, `RUN+=` on iio device-add) and the `realsense-imu-permissions.service` boot unit, so the launch-time call was redundant. The unused `ExecuteProcess` import is removed.
+
 ## [0.3.0] - 2026-07-05
 
 Driver-side migration to the NEO-PIT drive controller (Teensy 4.1 PCB, repo `neo-pit-pcb` / firmware `racecar-pit-firmware`), which replaces the Pololu Maestro and moves the LSM9DS1 IMU, INA226 power sensor, and hall encoder onto the board. The Pi now speaks a binary UART protocol to the Teensy instead of driving the Maestro over USB and reading the IMU over I2C. Command semantics are unchanged: `/drive` stays normalized `[-1, 1]`, mapped to servo/ESC PWM on the Teensy (open-loop passthrough).

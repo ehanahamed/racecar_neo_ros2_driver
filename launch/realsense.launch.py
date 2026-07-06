@@ -6,7 +6,6 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
-    ExecuteProcess,
     IncludeLaunchDescription,
     TimerAction,
 )
@@ -42,16 +41,14 @@ def generate_launch_description():
         description='Color stream profile (widthxheightxfps)'
     )
 
-    # Fix IMU IIO permissions before launching the camera node.
-    # The D435i IMU uses HID-sensor IIO devices whose sysfs attributes
-    # default to root-only on the Pi 5.
-    fix_imu_permissions = ExecuteProcess(
-        cmd=['sudo', '/usr/local/bin/fix-realsense-imu.sh'],
-        output='screen',
-    )
+    # D435i IMU IIO/HID-sensor sysfs attributes default to root-only on the
+    # Pi 5. Permissions are fixed at the root level by setup_realsense.sh's
+    # udev rule (99-realsense-imu.rules, RUN+= on iio device-add) and the
+    # realsense-imu-permissions.service boot unit; the launch does not shell
+    # out to sudo (no TTY under systemd, so it only ever failed with exit 1).
 
-    # Include the stock realsense launch with UAV Neo defaults (delayed
-    # slightly to allow the permission fix to complete)
+    # Include the stock realsense launch with UAV Neo defaults; a short delay
+    # lets the camera USB enumerate before rs_launch opens it.
     realsense_launch = TimerAction(
         period=1.0,
         actions=[
@@ -106,7 +103,6 @@ def generate_launch_description():
         align_depth_arg,
         depth_profile_arg,
         color_profile_arg,
-        fix_imu_permissions,
         # Republish the RealSense streams onto the RACECAR topic names the
         # student library and edgetpu_node read: color -> /camera/color,
         # depth -> /camera/depth, and the combined IMU -> /imu/realsense
