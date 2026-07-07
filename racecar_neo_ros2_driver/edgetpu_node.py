@@ -139,16 +139,9 @@ class EdgeTPUNode(Node):
             f'EdgeTPU found: {tpus[0]["type"]} at {tpus[0]["path"]}'
         )
 
-        # First load after a cold boot may fail while the Coral firmware enumerates
-        # (1a6e:089a → 18d1:9302). Retry once after a short sleep.
-        try:
-            self._interpreter = make_interpreter(model_path)
-        except ValueError:
-            self.get_logger().warn(
-                'First make_interpreter failed (Coral firmware load?); retrying'
-            )
-            time.sleep(1.5)
-            self._interpreter = make_interpreter(model_path)
+        # The M.2 Apex is bound at boot and loads on the first try; no USB
+        # firmware-enumeration retry needed.
+        self._interpreter = make_interpreter(model_path)
         self._interpreter.allocate_tensors()
 
         self._input_details = self._interpreter.get_input_details()[0]

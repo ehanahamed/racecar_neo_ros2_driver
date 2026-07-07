@@ -28,6 +28,17 @@ def _lsusb_match(vid_pid):
     return vid_pid.lower() in out.lower()
 
 
+def _lspci_match(vid_pid):
+    """Return True if `lspci -nn` lists a PCI device matching vid:pid."""
+    try:
+        out = subprocess.run(
+            ['lspci', '-nn'], capture_output=True, text=True, timeout=5
+        ).stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    return vid_pid.lower() in out.lower()
+
+
 def _i2c_probe(bus, address):
     """Return True if i2cdetect reports a device at `address` on `bus`."""
     try:
@@ -208,14 +219,22 @@ class TestRealSense:
 
 @pytest.mark.hardware
 class TestCoral:
-    # USB ID flips after the first firmware load; either is acceptable.
+    # M.2 (PCIe) Apex is the primary device; the M.2 setup lands /dev/apex_0.
+    M2_PCI_ID = '1ac1:089a'
+    APEX_DEV = '/dev/apex_0'
+    # USB accelerator IDs (fallback). The USB ID flips after the first
+    # firmware load; either is acceptable.
     PRE_INIT_ID = '1a6e:089a'
     POST_INIT_ID = '18d1:9302'
 
-    def test_usb_present(self):
-        assert _lsusb_match(self.PRE_INIT_ID) or _lsusb_match(self.POST_INIT_ID), (
-            f'Coral EdgeTPU not detected (looking for USB {self.PRE_INIT_ID} '
-            f'or {self.POST_INIT_ID}). Plug in the USB accelerator.'
+    def test_device_present(self):
+        m2 = _lspci_match(self.M2_PCI_ID) or os.path.exists(self.APEX_DEV)
+        usb = _lsusb_match(self.PRE_INIT_ID) or _lsusb_match(self.POST_INIT_ID)
+        assert m2 or usb, (
+            f'Coral EdgeTPU not detected. Expected the M.2 Apex '
+            f'(PCI {self.M2_PCI_ID} or {self.APEX_DEV}) or the USB accelerator '
+            f'(USB {self.PRE_INIT_ID}/{self.POST_INIT_ID}). Run setup_coral.sh; '
+            f'the M.2 needs a reboot after setup.'
         )
 
     @pytest.mark.skipif(
@@ -233,8 +252,8 @@ class TestCoral:
         import pycoral.utils.edgetpu  # noqa: F401
 
     # Inference latency budget. The bundled efficientdet-lite0 typically
-    # runs at 15-25 ms on the USB Coral attached to a Pi 5; 100 ms gives
-    # generous headroom for the first 1-2 warmup invocations + USB
+    # runs single-digit ms on the M.2 (PCIe) Apex on a Pi 5; 100 ms gives
+    # generous headroom for the first 1-2 warmup invocations + bus
     # contention with active camera streams while teleop is running.
     INFERENCE_BUDGET_MS = 100.0
 
@@ -251,9 +270,9 @@ class TestCoral:
         if not list_edge_tpus():
             pytest.skip('No EdgeTPU device — cannot run inference')
 
-        # The Coral USB device only supports one user at a time. If
-        # edgetpu_node is running (likely under racecar-teleop.service) the
-        # delegate load will fail. Skip rather than report a spurious failure.
+        # The EdgeTPU delegate is single-user. If edgetpu_node is running
+        # (likely under racecar-teleop.service) the delegate load will fail.
+        # Skip rather than report a spurious failure.
         running = subprocess.run(
             ['pgrep', '-f', 'lib/racecar_neo_ros2_driver/edgetpu_node'],
             capture_output=True,
