@@ -85,6 +85,27 @@ class TestDecodeTelemetry:
         assert t.gyro == (3.0, 4.0, 5.0)
         assert t.mag == (6.0, 7.0, 8.0)
 
+    def test_power_unit_conversions(self):
+        # volt_curr is [bus mV, current mA]; properties report V and A.
+        t = pit.decode_telemetry(_build_telemetry(volt_curr=(7912, 2500)))
+        assert t.voltage_v == pytest.approx(7.912)
+        assert t.current_a == pytest.approx(2.5)
+
+    def test_rc_normalized(self):
+        # 1500 us -> 0, 2000 -> +1, 1000 -> -1; out-of-range clamps to [-1, 1].
+        t = pit.decode_telemetry(
+            _build_telemetry(rc=(1500, 2000, 1000, 1750, 1250, 900, 2100, 1500))
+        )
+        got = t.rc_normalized
+        assert got[0] == pytest.approx(0.0)
+        assert got[1] == pytest.approx(1.0)
+        assert got[2] == pytest.approx(-1.0)
+        assert got[3] == pytest.approx(0.5)
+        assert got[4] == pytest.approx(-0.5)
+        assert got[5] == pytest.approx(-1.0)  # 900 us clamps
+        assert got[6] == pytest.approx(1.0)   # 2100 us clamps
+        assert len(got) == 8
+
     def test_bad_crc_flag(self):
         t = pit.decode_telemetry(_build_telemetry(good_crc=False))
         assert t.crc_ok is False

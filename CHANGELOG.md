@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+### Added
+
+- **Power + RC telemetry republish** in `pit_node`: `/battery/voltage` (`Float32`, volts) and `/battery/current` (`Float32`, amps) from the INA226, and `/rc/channels` (`Float32MultiArray`, the eight FlySky channels normalized to `[-1, 1]`, 1500 us center). New params `voltage_topic`, `current_topic`, `rc_topic`. Conversions live in `pit_protocol.Telemetry` (`voltage_v`, `current_a`, `rc_normalized`) with unit tests. Voltage and RC need no firmware change; current requires the `racecar-pit-firmware` mA-resolution fix.
+
 ## [0.4.0] - 2026-07-06
 
 NEO-PIT communication maturity: the Teensy now owns the physical PWM limits and the display peripherals, the Pi exposes encoder speed and forwards dot-matrix/LED content and drive state over the command frame. Pairs with `racecar-pit-firmware` v0.4.0. Drive polarity and dot-matrix pixel orientation are settled on hardware (see Notes).
