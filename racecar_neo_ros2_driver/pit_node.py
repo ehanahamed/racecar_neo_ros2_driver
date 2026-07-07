@@ -42,7 +42,7 @@ from rclpy.qos import (
 )
 from sensor_msgs.msg import Imu, Joy, MagneticField
 import serial
-from std_msgs.msg import Float32, UInt8MultiArray
+from std_msgs.msg import Float32, Float32MultiArray, UInt8MultiArray
 
 from . import pit_protocol as pit
 from .mux_node import MuxMode, select_mode
@@ -109,6 +109,12 @@ class PitNode(Node):
         self.declare_parameter('speed_sign', 1)
         self.declare_parameter('require_crc', False)
 
+        # Power telemetry republish (INA226 bus voltage V, battery current A) and
+        # the eight FlySky RC channels normalized to [-1, 1].
+        self.declare_parameter('voltage_topic', '/battery/voltage')
+        self.declare_parameter('current_topic', '/battery/current')
+        self.declare_parameter('rc_topic', '/rc/channels')
+
         # Encoder speed republish + display/LED command forwarding to the Teensy.
         self.declare_parameter('encoder_topic', '/encoder/speed')
         self.declare_parameter('dotmatrix_topic', '/dotmatrix/frame')
@@ -156,6 +162,9 @@ class PitNode(Node):
         self._imu_topic = self.get_parameter('imu_topic').value
         self._mag_topic = self.get_parameter('mag_topic').value
         self._encoder_topic = self.get_parameter('encoder_topic').value
+        self._voltage_topic = self.get_parameter('voltage_topic').value
+        self._current_topic = self.get_parameter('current_topic').value
+        self._rc_topic = self.get_parameter('rc_topic').value
         self._dotmatrix_topic = self.get_parameter('dotmatrix_topic').value
         self._led_topic = self.get_parameter('led_topic').value
         self._display_timeout = float(self.get_parameter('display_timeout_sec').value)
@@ -188,6 +197,9 @@ class PitNode(Node):
         self._pub_imu = self.create_publisher(Imu, self._imu_topic, qos)
         self._pub_mag = self.create_publisher(MagneticField, self._mag_topic, qos)
         self._pub_encoder = self.create_publisher(Float32, self._encoder_topic, qos)
+        self._pub_voltage = self.create_publisher(Float32, self._voltage_topic, qos)
+        self._pub_current = self.create_publisher(Float32, self._current_topic, qos)
+        self._pub_rc = self.create_publisher(Float32MultiArray, self._rc_topic, qos)
         self.create_subscription(AckermannDriveStamped, '/motor', self._motor_cb, qos)
         self.create_subscription(UInt8MultiArray, self._dotmatrix_topic, self._dot_cb, qos)
         self.create_subscription(UInt8MultiArray, self._led_topic, self._led_cb, qos)
@@ -345,6 +357,16 @@ class PitNode(Node):
         enc = Float32()
         enc.data = float(telem.encoder)
         self._pub_encoder.publish(enc)
+
+        volt = Float32()
+        volt.data = float(telem.voltage_v)
+        self._pub_voltage.publish(volt)
+        curr = Float32()
+        curr.data = float(telem.current_a)
+        self._pub_current.publish(curr)
+        rc = Float32MultiArray()
+        rc.data = [float(c) for c in telem.rc_normalized]
+        self._pub_rc.publish(rc)
 
         if self._publish_mag:
             mag_vec = transform_mag(

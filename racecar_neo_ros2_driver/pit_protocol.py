@@ -75,9 +75,10 @@ class Telemetry:
     imu holds the nine LSM9DS1 channels in firmware order
     [ax, ay, az, gx, gy, gz, mx, my, mz], in whatever units the firmware's
     Adafruit_LSM9DS1 getEvent() emits (accel m/s^2; gyro and mag units are
-    unverified, see pit_node scale params). volt_curr and rc are raw counts.
-    crc_ok reflects the CRC-16 check; it is False against current firmware,
-    which leaves the checksum field uninitialized.
+    unverified, see pit_node scale params). volt_curr is [bus voltage mV,
+    current mA]; rc is the eight FlySky channels as raw pulse widths in us
+    (~1000-2000). crc_ok reflects the CRC-16 check; it is False against current
+    firmware, which leaves the checksum field uninitialized.
     """
 
     version: int
@@ -102,6 +103,25 @@ class Telemetry:
     @property
     def mag(self) -> tuple:
         return self.imu[6:9]
+
+    @property
+    def voltage_v(self) -> float:
+        """Bus voltage in volts (firmware packs mV)."""
+        return self.volt_curr[0] / 1000.0
+
+    @property
+    def current_a(self) -> float:
+        """Battery current in amps (firmware packs mA)."""
+        return self.volt_curr[1] / 1000.0
+
+    @property
+    def rc_normalized(self) -> tuple:
+        """
+        The eight FlySky channels mapped from their ~1000-2000 us pulse widths
+        to [-1, 1] (1500 us center), clamped. Channels with no transmitter
+        signal read near 0.
+        """
+        return tuple(max(-1.0, min(1.0, (c - 1500.0) / 500.0)) for c in self.rc)
 
 
 def decode_telemetry(packet: bytes) -> Telemetry:

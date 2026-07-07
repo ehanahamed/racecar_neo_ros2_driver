@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-07
+
+Battery power and FlySky RC telemetry, already decoded from the Teensy frame, are now exposed as ROS topics and read by the student library. Pairs with `racecar-pit-firmware` v0.5.0 (which fixes the current packing to mA).
+
+### Added
+
+- **Power + RC telemetry republish** in `pit_node`: `/battery/voltage` (`Float32`, volts) and `/battery/current` (`Float32`, amps) from the INA226, and `/rc/channels` (`Float32MultiArray`, the eight FlySky channels normalized to `[-1, 1]`, 1500 us center). New params `voltage_topic`, `current_topic`, `rc_topic`. Conversions live in `pit_protocol.Telemetry` (`voltage_v`, `current_a`, `rc_normalized`) with unit tests. Voltage and RC need no firmware change; current requires the `racecar-pit-firmware` mA-resolution fix.
+- **Library `physics` API** (`racecar-neo-library`): `get_battery_voltage()`, `get_battery_current()`, and `get_rc_channels()` read the new topics on the physical car; the simulator returns defaults (0.0 and eight zeros).
+
 ## [0.4.0] - 2026-07-06
 
 NEO-PIT communication maturity: the Teensy now owns the physical PWM limits and the display peripherals, the Pi exposes encoder speed and forwards dot-matrix/LED content and drive state over the command frame. Pairs with `racecar-pit-firmware` v0.4.0. Drive polarity and dot-matrix pixel orientation are settled on hardware (see Notes).
