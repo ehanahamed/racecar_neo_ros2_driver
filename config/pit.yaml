@@ -13,8 +13,8 @@ pit_node:
 
     # Per-axis polarity, corrected on hardware without reflashing firmware.
     # +speed = forward, +steering_angle = left (ackermann convention on /motor).
-    steering_sign: 1
-    speed_sign: 1
+    steering_sign: -1
+    speed_sign: -1
 
     # Firmware does not compute the CRC-16 yet; keep false until it does.
     require_crc: false
