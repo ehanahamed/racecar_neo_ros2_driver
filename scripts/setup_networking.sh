@@ -1,23 +1,26 @@
 #!/bin/bash
-# setup_networking.sh — configure eth0 dual-IP and wlan0 isolated AP for racecar.
+# setup_networking.sh — configure eth0 dual-IP and an isolated AP on the ALFA
+# dongle for racecar.
 #
 # This script:
-#   1. Installs a NetworkManager dispatcher that blocks FORWARD on wlan0 so AP
-#      clients can reach the Pi's services (dashboard, jupyter, SSH) but cannot
-#      use the Pi as an internet gateway.
-#   2. Removes any prior Wi-Fi client connection on wlan0 (e.g. a leftover
-#      eduroam/home-WiFi connection from a previous setup).
-#   3. Creates the racecar AP NetworkManager connection on wlan0 (WPA2 / 2.4 GHz
-#      / channel 6 / 10.42.0.1/24).
-#   4. Writes /etc/netplan/99-racecar-eth0.yaml so eth0 carries both a static
-#      address (default 192.168.52.200/24) and a DHCP-assigned address.
-#   5. Runs `netplan apply` to bring the new config up.
+#   1. Installs a NetworkManager dispatcher that blocks FORWARD on the AP
+#      interface so AP clients can reach the Pi's services (dashboard, jupyter,
+#      SSH) but cannot use the Pi as an internet gateway.
+#   2. Creates the racecar AP NetworkManager connection on the AP interface
+#      (WPA2 / 2.4 GHz / channel 6 / 10.42.0.1/24). The AP interface is the ALFA
+#      MT7612U dongle, pinned to wlan1 by the 99-racecar.rules udev rule.
+#   3. Writes /etc/netplan/99-racecar-eth0.yaml so eth0 carries both a static
+#      address (default 192.168.52.200/24) and a DHCP-assigned address, then
+#      runs `netplan apply`.
+#   4. Resets the Pi's built-in wlan0 to default (client) mode, removing any AP
+#      connection a pre-v0.7.0 setup left bound to it.
 #
-# WARNING: this script reconfigures wlan0. If you're SSH'd in over WiFi, the
-# connection will drop when the AP comes up. Run from a wired (eth0) session
-# or directly on the console.
+# WARNING: this script reconfigures the AP interface. If you're SSH'd in over
+# the AP, the connection will drop when the AP cycles. Run from a wired (eth0)
+# session or directly on the console.
 #
 # Parameters (override via environment variables before running):
+#   RACECAR_AP_IFACE      (default: wlan1 — the ALFA dongle)
 #   RACECAR_AP_SSID       (default: racecar-neo-1)
 #   RACECAR_AP_PSK        (default: racecar@mit)
 #   RACECAR_AP_CHANNEL    (default: 6)
@@ -49,6 +52,7 @@ fi
 
 echo "=== RACECAR Neo Networking Setup ==="
 
+AP_IFACE="${RACECAR_AP_IFACE:-wlan1}"
 AP_SSID="${RACECAR_AP_SSID:-racecar-neo-1}"
 AP_PSK="${RACECAR_AP_PSK:-racecar@mit}"
 AP_CON_NAME="racecar-neo-ap"
@@ -63,32 +67,57 @@ NETPLAN_ETH_PATH="/etc/netplan/99-racecar-eth0.yaml"
 
 CHANGES_MADE=false
 
+# --- Resolve the AP interface ------------------------------------------------
+# Default wlan1 is the udev-assigned stable name for the ALFA MT7612U
+# (0e8d:7612, driver mt76x2u). If the rename hasn't taken effect yet (e.g. no
+# reboot since setup_udev.sh), fall back to whatever wireless netdev the
+# mt76x2u driver bound.
+if [ ! -d "/sys/class/net/$AP_IFACE/wireless" ]; then
+    for cand in /sys/class/net/*/wireless; do
+        [ -e "$cand" ] || continue
+        i="$(basename "$(dirname "$cand")")"
+        drv="$(basename "$(readlink -f "/sys/class/net/$i/device/driver" 2>/dev/null)" 2>/dev/null)"
+        if [ "$drv" = "mt76x2u" ]; then
+            echo "  AP interface '$AP_IFACE' not present; using detected ALFA interface '$i'."
+            echo "  (Reboot after setup_udev.sh so the udev rule renames it to wlan1.)"
+            AP_IFACE="$i"
+            break
+        fi
+    done
+fi
+if [ ! -d "/sys/class/net/$AP_IFACE/wireless" ]; then
+    echo "ERROR: no AP wireless interface found (looked for '$AP_IFACE' and an mt76x2u adapter)." >&2
+    echo "       Plug in the ALFA dongle; run scripts/setup_udev.sh and reboot so it becomes wlan1." >&2
+    exit 1
+fi
+echo "AP interface: $AP_IFACE"
+
 # --- 1. AP-isolation dispatcher ----------------------------------------------
 echo "[1/4] Installing AP isolation dispatcher at $DISPATCHER_PATH..."
 TMP_DISPATCHER=$(mktemp)
 cat >"$TMP_DISPATCHER" <<SCRIPT
 #!/bin/sh
 # RACECAR Neo hotspot isolation — NM's ipv4.method=shared enables IP forwarding
-# and sets up NAT, which would let wlan0 AP clients route out through eth0.
-# Block FORWARD in/out of wlan0 so clients can reach the Pi's own services
+# and sets up NAT, which would let AP clients route out through eth0. Block
+# FORWARD in/out of the AP interface so clients can reach the Pi's own services
 # (dashboard, jupyter, SSH) but cannot use the Pi as an internet gateway.
 
 iface="\$1"
 action="\$2"
 
-[ "\$iface" = "wlan0" ] || exit 0
+[ "\$iface" = "$AP_IFACE" ] || exit 0
 [ "\$CONNECTION_ID" = "$AP_CON_NAME" ] || exit 0
 
 case "\$action" in
     up)
-        iptables -D FORWARD -i wlan0 -j REJECT 2>/dev/null
-        iptables -D FORWARD -o wlan0 -j REJECT 2>/dev/null
-        iptables -I FORWARD -i wlan0 -j REJECT
-        iptables -I FORWARD -o wlan0 -j REJECT
+        iptables -D FORWARD -i $AP_IFACE -j REJECT 2>/dev/null
+        iptables -D FORWARD -o $AP_IFACE -j REJECT 2>/dev/null
+        iptables -I FORWARD -i $AP_IFACE -j REJECT
+        iptables -I FORWARD -o $AP_IFACE -j REJECT
         ;;
     down|pre-down)
-        iptables -D FORWARD -i wlan0 -j REJECT 2>/dev/null
-        iptables -D FORWARD -o wlan0 -j REJECT 2>/dev/null
+        iptables -D FORWARD -i $AP_IFACE -j REJECT 2>/dev/null
+        iptables -D FORWARD -o $AP_IFACE -j REJECT 2>/dev/null
         ;;
 esac
 exit 0
@@ -119,18 +148,21 @@ if ! systemctl is-enabled --quiet NetworkManager-dispatcher.service; then
 fi
 
 # --- 2. Create or update the AP connection -----------------------------------
-# Order matters: the AP must be up BEFORE we delete the prior Wi-Fi client
-# below. If any step from here through netplan-apply fails under `set -e`,
-# the user's existing Wi-Fi connection is still intact for recovery.
-echo "[2/4] Configuring AP connection '$AP_CON_NAME' (SSID: $AP_SSID)..."
+# Order matters: the AP must be up BEFORE we reset wlan0 below. If any step from
+# here through netplan-apply fails under `set -e`, the prior config is still
+# intact for recovery.
+echo "[2/4] Configuring AP connection '$AP_CON_NAME' on $AP_IFACE (SSID: $AP_SSID)..."
 if nmcli -t -f NAME con show | grep -qx "$AP_CON_NAME"; then
     # Diff each user-tunable setting against what nmcli reports; only call
     # `nmcli connection modify` when at least one field differs. (modify
     # always returns 0 even on no-op, so we can't rely on its exit code
     # to detect change.) PSK is hidden by default — use `--show-secrets`.
+    # connection.interface-name is included so a pre-v0.7.0 AP pinned to wlan0
+    # migrates onto the ALFA interface.
     nmcli_get() { sudo nmcli --show-secrets -g "$1" con show "$AP_CON_NAME" 2>/dev/null; }
     diff_ap=false
     for spec in \
+        "connection.interface-name=$AP_IFACE" \
         "802-11-wireless.ssid=$AP_SSID" \
         "802-11-wireless.mode=ap" \
         "802-11-wireless.band=$AP_BAND" \
@@ -150,6 +182,7 @@ if nmcli -t -f NAME con show | grep -qx "$AP_CON_NAME"; then
     if [ "$diff_ap" = "true" ]; then
         echo "  Settings differ — applying."
         sudo nmcli connection modify "$AP_CON_NAME" \
+            connection.interface-name "$AP_IFACE" \
             802-11-wireless.ssid "$AP_SSID" \
             802-11-wireless.mode ap \
             802-11-wireless.band "$AP_BAND" \
@@ -167,7 +200,7 @@ else
     echo "  Creating new AP connection..."
     sudo nmcli connection add \
         type wifi \
-        ifname wlan0 \
+        ifname "$AP_IFACE" \
         con-name "$AP_CON_NAME" \
         autoconnect yes \
         ssid "$AP_SSID" \
@@ -182,10 +215,11 @@ else
 fi
 
 # Bring the AP up only if it isn't already, OR if settings just changed
-# (changes require a cycle to take effect). Avoids momentarily dropping AP
-# clients during no-op re-runs.
+# (changes require a cycle to take effect, including a migration from wlan0 to
+# the ALFA interface). Avoids momentarily dropping AP clients on no-op re-runs.
 ap_state=$(nmcli -t -f GENERAL.STATE con show "$AP_CON_NAME" 2>/dev/null | head -1)
 if [ "$CHANGES_MADE" = "true" ] || [ "$ap_state" != "activated" ]; then
+    sudo nmcli connection down "$AP_CON_NAME" >/dev/null 2>&1 || true
     sudo nmcli connection up "$AP_CON_NAME" >/dev/null 2>&1 || true
 fi
 
@@ -226,27 +260,40 @@ if [ "$CHANGES_MADE" = "true" ]; then
     echo
     echo "Applying netplan..."
     sudo netplan apply
+    # `netplan apply` briefly bounces NetworkManager's D-Bus service. Wait for
+    # it to come back so the wlan0 reset below runs against a live NM instead
+    # of failing with "NetworkManager is not running" and silently no-op'ing.
+    for _ in $(seq 1 15); do
+        nmcli general status >/dev/null 2>&1 && break
+        sleep 1
+    done
 fi
 
-# --- 4. Delete prior Wi-Fi client connections on wlan0 -----------------------
-# Done LAST: by this point AP + eth0 are up, so removing the user's old
-# Wi-Fi client connection can't strand the box. If anything above failed
-# under `set -e`, we never get here and the user's wifi survives.
-echo "[4/4] Removing any prior Wi-Fi client connection on wlan0..."
-mapfile -t prior_wifi < <(
-    nmcli -t -f NAME,TYPE,DEVICE con show |
-    awk -F: -v ap="$AP_CON_NAME" '
-        $2 == "802-11-wireless" && $1 != ap { print $1 }
-    '
+# --- 4. Reset the Pi's built-in wlan0 to default (client) mode ---------------
+# Done LAST: by this point the AP is up on the ALFA interface, so removing an
+# AP connection left on wlan0 by a pre-v0.7.0 setup can't strand the box. If
+# anything above failed under `set -e`, we never get here.
+echo "[4/4] Resetting the Pi's built-in wlan0 to default (client) mode..."
+mapfile -t wlan0_aps < <(
+    nmcli -t -f NAME,TYPE con show |
+    awk -F: '$2 == "802-11-wireless" { print $1 }'
 )
-if [ "${#prior_wifi[@]}" -eq 0 ]; then
-    echo "  No prior Wi-Fi client connections found."
-else
-    for con in "${prior_wifi[@]}"; do
-        echo "  Deleting connection '$con'..."
+reset_any=false
+for con in "${wlan0_aps[@]}"; do
+    [ -z "$con" ] && continue
+    ifn=$(sudo nmcli -g connection.interface-name con show "$con" 2>/dev/null || true)
+    mode=$(sudo nmcli -g 802-11-wireless.mode con show "$con" 2>/dev/null || true)
+    if [ "$ifn" = "wlan0" ] && [ "$mode" = "ap" ]; then
+        echo "  Removing stale AP connection '$con' pinned to wlan0."
         sudo nmcli connection delete "$con"
         CHANGES_MADE=true
-    done
+        reset_any=true
+    fi
+done
+# Ensure wlan0 is NetworkManager-managed (available as a normal client).
+sudo nmcli device set wlan0 managed yes >/dev/null 2>&1 || true
+if [ "$reset_any" = "false" ]; then
+    echo "  No AP connection bound to wlan0; left as a managed client interface."
 fi
 
 echo
@@ -254,9 +301,10 @@ echo "=== Done ==="
 echo
 echo "Verify with:"
 echo "  ip -br addr show eth0              # static $ETH_STATIC_ADDR + DHCP"
-echo "  iw dev wlan0 info                  # ssid $AP_SSID, type AP, ch $AP_CHANNEL"
-echo "  sudo iptables-nft -L FORWARD -nv   # two REJECT rules with wlan0 in in/out columns"
-echo "                                     # (use -nv; plain -n hides the iface columns)"
+echo "  iw dev $AP_IFACE info              # ssid $AP_SSID, type AP, ch $AP_CHANNEL"
+echo "  iw dev wlan0 info                 # type managed (client/default)"
+echo "  sudo iptables-nft -L FORWARD -nv  # two REJECT rules with $AP_IFACE in in/out columns"
+echo "                                    # (use -nv; plain -n hides the iface columns)"
 echo
 echo "Join the AP from a client:"
 echo "  SSID: $AP_SSID"

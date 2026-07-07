@@ -167,7 +167,7 @@ class TestSetup:
         result = _run('setup', 'networking', '--help')
         assert result.returncode == 0
         for flag in ('--ssid', '--psk', '--channel', '--ap-addr',
-                     '--eth-static', '--show', '--reset'):
+                     '--ap-iface', '--eth-static', '--show', '--reset'):
             assert flag in result.stdout
 
     def test_networking_unknown_flag_errors(self):

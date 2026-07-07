@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-07
+
+Move the WiFi access point off the Pi's built-in `wlan0` onto an attached ALFA MT7612U USB dongle. The dongle is a dedicated AP radio; `wlan0` is returned to default client mode, freeing the Pi's onboard WiFi for normal use.
+
+### Added
+
+- **ALFA dongle udev rename** in `scripts/udev/99-racecar.rules`: the ALFA MT7612U (`0e8d:7612`, driver `mt76x2u`) is pinned to a stable `wlan1` so the AP binds to a fixed name regardless of the per-unit MAC-derived name the predictable-naming scheme would assign.
+- **`--ap-iface` / `RACECAR_AP_IFACE`**: the AP interface is now configurable (default `wlan1`). `setup_networking.sh` auto-detects the `mt76x2u` adapter if `wlan1` is not present yet (e.g. before the udev rename takes effect on reboot).
+
+### Changed
+
+- **`setup_networking.sh`** builds the AP connection and the `iptables FORWARD REJECT` isolation dispatcher on the AP interface (`$AP_IFACE`, default `wlan1`) instead of `wlan0`. A pre-existing `racecar-neo-ap` connection pinned to `wlan0` is migrated onto the dongle via `connection.interface-name`.
+- **Docs and tool help** (`README.md`, `docs/networking_test_checklist.md`, `racecar-tool.sh`) refer to the ALFA-dongle AP and the new `--ap-iface` flag; verification now checks `wlan1` for the AP and `wlan0` for managed/client.
+
+### Removed
+
+- The Pi's built-in `wlan0` no longer hosts the AP. `setup_networking.sh` removes any AP connection a pre-v0.7.0 setup left bound to `wlan0` and sets the interface back to NetworkManager-managed (client) mode.
+
 ## [0.6.0] - 2026-07-07
 
 Coral Edge TPU moves from the USB accelerator to the M.2 (PCIe) Apex card (`1ac1:089a`). Ported from `uav_neo_ros2_driver` PR #8; racecar-neo runs the same Pi 5 / BCM2712, so the recipe transfers directly. See [docs/coral-m2-migration.md](docs/coral-m2-migration.md).
