@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-07-07
+
+### Fixed
+
+- **eth0 static address reset loop.** `99-racecar-eth0.yaml` declared the static (`192.168.52.200/24`) twice: once via netplan `addresses:`/`dhcp4:` and again as `ipv4.method: auto` + `ipv4.address1` in the `networkmanager.passthrough`. NetworkManager kept reconciling the two, so the static was removed and re-added repeatedly. The static is now declared once via `addresses:`; the passthrough keeps only `may-fail`/`dhcp-timeout`. The static carries no gateway (DHCP owns the default route, so no collision with the dynamic address), and `may-fail` lets the link settle on the static alone after one `dhcp-timeout` when no DHCP server answers instead of retrying forever. `dhcp4-overrides.route-metric: 100` keeps the DHCP default route at the normal metric.
+
 ## [0.7.1] - 2026-07-07
 
 Per-car SSID and an AP-disable reset, for imaging a fleet. Each car needs a distinct SSID so multiple robots can roam without colliding, and a golden image must ship with no active AP.

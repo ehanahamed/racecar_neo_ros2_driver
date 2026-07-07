@@ -253,7 +253,16 @@ if [ "$CHANGES_MADE" = "true" ] || [ "$ap_state" != "activated" ]; then
 fi
 
 # --- 3. eth0 dual-IP via netplan ---------------------------------------------
-echo "[3/4] Configuring eth0 dual-IP (static $ETH_STATIC_ADDR + DHCP)..."
+echo "[3/4] Configuring eth0 dual-IP (fixed static $ETH_STATIC_ADDR + DHCP)..."
+# The static is a permanent secondary address, declared once via `addresses:`
+# (netplan derives ipv4.method=auto + the address from dhcp4 + addresses). The
+# previous file ALSO re-declared ipv4.method/ipv4.address1 in the passthrough,
+# so the same address was specified twice and NetworkManager kept reconciling
+# the two, which reset the static over and over. It carries no gateway, so DHCP
+# owns the default route and the static never collides with the dynamic address.
+# may-fail lets the link finish activating on the static alone after one
+# dhcp-timeout when no DHCP server answers (instead of retrying forever), and
+# DHCP still adds its own address + default route whenever a server is present.
 TMP_NETPLAN=$(mktemp)
 cat >"$TMP_NETPLAN" <<YAML
 network:
@@ -261,15 +270,15 @@ network:
   ethernets:
     eth0:
       renderer: NetworkManager
-      addresses:
-      - "$ETH_STATIC_ADDR"
       dhcp4: true
       dhcp6: true
       optional: true
+      addresses:
+      - "$ETH_STATIC_ADDR"
+      dhcp4-overrides:
+        route-metric: 100
       networkmanager:
         passthrough:
-          ipv4.method: "auto"
-          ipv4.address1: "$ETH_STATIC_ADDR"
           ipv4.dhcp-timeout: "15"
           ipv4.may-fail: "true"
 YAML

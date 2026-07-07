@@ -159,6 +159,18 @@ class TestNetworkingScript:
         assert 'RACECAR_AP_ID' in text, 'per-car SSID id not referenced'
         assert 'racecar-neo' in text, 'SSID base not referenced'
 
+    def test_eth0_static_declared_once(self):
+        # v0.7.2: the eth0 static must be declared once (via netplan
+        # `addresses:`), not also re-declared as ipv4.method/ipv4.address1 in the
+        # passthrough. The double declaration made NetworkManager reconcile the
+        # two and reset the static over and over.
+        # Match the YAML-key forms (with colon) so the explanatory comment,
+        # which names the old keys in prose, doesn't trip the check.
+        text = self.SCRIPT.read_text()
+        assert 'ipv4.address1:' not in text, 'eth0 static double-declared (ipv4.address1)'
+        assert 'ipv4.method: "auto"' not in text, 'eth0 method double-declared in passthrough'
+        assert 'ipv4.may-fail' in text, 'eth0 must keep may-fail so the static stays if DHCP fails'
+
     def test_loads_persisted_config(self):
         # The script must source the ~/.config/racecar/networking.env file
         # so the user's persisted overrides apply on every run.
