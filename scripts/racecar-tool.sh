@@ -207,6 +207,7 @@ __RC_SVC_HELP__
                             --psk)         vals[RACECAR_AP_PSK]="$val";     vals_changed=1 ;;
                             --channel)     vals[RACECAR_AP_CHANNEL]="$val"; vals_changed=1 ;;
                             --ap-addr)     vals[RACECAR_AP_ADDR]="$val";    vals_changed=1 ;;
+                            --ap-iface)    vals[RACECAR_AP_IFACE]="$val";   vals_changed=1 ;;
                             --eth-static)  vals[RACECAR_ETH_STATIC]="$val"; vals_changed=1 ;;
                             --show)        action="show" ;;
                             --reset)       action="reset" ;;
@@ -222,17 +223,18 @@ __RC_SVC_HELP__
                         cat <<'__RC_NET_HELP__'
 usage: racecar setup networking [--ssid=NAME] [--psk=PASS]
                                 [--channel=N] [--ap-addr=CIDR]
-                                [--eth-static=CIDR]
+                                [--ap-iface=NAME] [--eth-static=CIDR]
                                 [--show] [--reset]
 Persists any --flag values to ~/.config/racecar/networking.env and then
-runs scripts/setup_networking.sh (eth0 dual-IP + wlan0 isolated AP).
+runs scripts/setup_networking.sh (eth0 dual-IP + ALFA-dongle isolated AP).
+  --ap-iface=NAME  AP interface (default wlan1, the ALFA dongle)
   --show   print current persisted overrides and exit
   --reset  delete the persisted file (revert to script defaults)
 Persistence runs BEFORE --show or --reset, so
   racecar setup networking --ssid=foo --show
 saves foo, then prints the new file contents.
-WARNING: this reconfigures wlan0. If you're SSH'd over WiFi, run from a
-wired session or the console instead.
+WARNING: this reconfigures the AP interface. If you're SSH'd over the AP,
+run from a wired session or the console instead.
 __RC_NET_HELP__
                         return 0
                     fi
@@ -252,7 +254,7 @@ __RC_NET_HELP__
                         : > "$cfg_file"
                         chmod 600 "$cfg_file"
                         echo "# racecar networking overrides — managed by 'racecar setup networking'" >> "$cfg_file"
-                        for k in RACECAR_AP_SSID RACECAR_AP_PSK RACECAR_AP_CHANNEL RACECAR_AP_ADDR RACECAR_ETH_STATIC; do
+                        for k in RACECAR_AP_SSID RACECAR_AP_PSK RACECAR_AP_CHANNEL RACECAR_AP_ADDR RACECAR_AP_IFACE RACECAR_ETH_STATIC; do
                             if [[ -n "${vals[$k]:-}" ]]; then
                                 printf '%s="%s"\n' "$k" "${vals[$k]}" >> "$cfg_file"
                             fi
@@ -607,10 +609,11 @@ Commands:
                         ~/logs/latest/watchdog.log. Assumes teleop runs separately.
     setup <phase>       Run a setup script. Phases:
                           all          — setup_all.sh (the 11-phase orchestrator)
-                          networking   — eth0 dual-IP + wlan0 isolated AP.
+                          networking   — eth0 dual-IP + ALFA-dongle isolated AP.
                                          Flags persist to ~/.config/racecar/networking.env:
                                            --ssid=NAME   --psk=PASS   --channel=N
                                            --ap-addr=CIDR (default 10.42.0.1/24)
+                                           --ap-iface=NAME (default wlan1, the ALFA dongle)
                                            --eth-static=CIDR (default 192.168.52.200/24)
                                            --show / --reset
                           realsense    — flash D435i firmware from the locally-staged

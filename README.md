@@ -139,7 +139,7 @@ Once the wired setup works, you can untether the robot from your home WiFi by ru
 racecar setup networking --ssid=racecar-neo-1 --psk='your-password'
 ```
 
-This brings up an isolated AP on `wlan0` and configures eth0 with both a static IP and DHCP. See [Networking (optional)](#networking-optional). **Run this from a wired (eth0) session or directly on the console** — it reconfigures `wlan0` and will drop SSH-over-WiFi.
+This brings up an isolated AP on the ALFA dongle (`wlan1`) and configures eth0 with both a static IP and DHCP. See [Networking (optional)](#networking-optional). **Run this from a wired (eth0) session or directly on the console** — it reconfigures the AP interface and will drop SSH-over-WiFi.
 
 ### What `setup_all.sh` actually does
 
@@ -179,7 +179,7 @@ racecar service stop        # default: stop teleop (watchdog follows via BindsTo
 racecar service logs teleop # journalctl -u racecar-teleop -f
 
 racecar setup all                       # run the 11-phase orchestrator
-racecar setup networking --ssid=foo     # configure eth0 dual-IP + wlan0 AP
+racecar setup networking --ssid=foo     # configure eth0 dual-IP + ALFA-dongle AP
 racecar setup networking --show         # print persisted overrides
 
 racecar selftest --dmatrix          # run all dot matrix patterns
@@ -195,7 +195,7 @@ Tab completion is registered for subcommands; `racecar launch <TAB>` discovers l
 
 ## Networking (optional)
 
-`scripts/setup_networking.sh` configures two things and is **not** invoked by `setup_all.sh` — it's a separate step because it reconfigures `wlan0` and would drop SSH-over-WiFi sessions during a fresh install. Run it from a wired (eth0) session or directly on the console:
+`scripts/setup_networking.sh` configures two things and is **not** invoked by `setup_all.sh` — it's a separate step because it reconfigures the AP interface and would drop SSH-over-WiFi sessions during a fresh install. Run it from a wired (eth0) session or directly on the console:
 
 ```sh
 racecar setup networking --ssid=racecar-neo-1 --psk='your-password'
@@ -204,7 +204,7 @@ racecar setup networking --ssid=racecar-neo-1 --psk='your-password'
 What it does:
 
 1. **eth0 dual-IP** via netplan — eth0 carries both a static address (default `192.168.52.200/24`) and a DHCP-assigned address. Lets you reach the robot at a known IP on a wired-only switch *and* via DHCP on a home network.
-2. **wlan0 isolated AP** via NetworkManager — the Pi hosts its own 2.4 GHz WiFi network. Clients can SSH / browse the dashboard / use jupyter, but a NetworkManager dispatcher installs `iptables FORWARD REJECT` rules so AP clients **cannot** route through the Pi to the internet (intentional isolation — keeps the robot's WiFi from becoming a janky general-purpose gateway).
+2. **ALFA-dongle isolated AP** via NetworkManager — the AP runs on the ALFA MT7612U dongle (pinned to `wlan1` by the udev rule), hosting its own 2.4 GHz WiFi network. Clients can SSH / browse the dashboard / use jupyter, but a NetworkManager dispatcher installs `iptables FORWARD REJECT` rules so AP clients **cannot** route through the Pi to the internet (intentional isolation — keeps the robot's WiFi from becoming a janky general-purpose gateway). The Pi's built-in `wlan0` is left in default client mode.
 
 Tunables (persisted to `~/.config/racecar/networking.env` and replayed on every re-run):
 
@@ -214,6 +214,7 @@ Tunables (persisted to `~/.config/racecar/networking.env` and replayed on every 
 | `--psk=PASS` | `racecar@mit` |
 | `--channel=N` | `6` |
 | `--ap-addr=CIDR` | `10.42.0.1/24` |
+| `--ap-iface=NAME` | `wlan1` (the ALFA dongle) |
 | `--eth-static=CIDR` | `192.168.52.200/24` |
 
 Inspect / clear the saved overrides:
@@ -227,8 +228,9 @@ Verify after running:
 
 ```sh
 ip -br addr show eth0           # static + DHCP both present
-iw dev wlan0 info               # type AP, your SSID, channel 6
-sudo iptables -L FORWARD -n     # two REJECT rules for wlan0
+iw dev wlan1 info               # type AP, your SSID, channel 6 (ALFA dongle)
+iw dev wlan0 info               # type managed (Pi built-in, client/default)
+sudo iptables -L FORWARD -n     # two REJECT rules for wlan1
 ```
 
 ## Web dashboard

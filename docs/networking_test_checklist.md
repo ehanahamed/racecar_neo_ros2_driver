@@ -1,6 +1,8 @@
 # v0.0.6 Networking — Test Checklist
 
-Walk through this on the actual robot to verify the eth0 dual-IP + wlan0 isolated AP setup. **Run from a wired (eth0) connection or the console** — `racecar setup networking` reconfigures wlan0 and will drop SSH-over-WiFi sessions.
+Walk through this on the actual robot to verify the eth0 dual-IP + ALFA-dongle isolated AP setup. **Run from a wired (eth0) connection or the console** — `racecar setup networking` reconfigures the AP interface and will drop SSH-over-WiFi sessions.
+
+> v0.7.0 note: the AP moved from the Pi's built-in `wlan0` to the ALFA MT7612U dongle (pinned to `wlan1` by the udev rule); `wlan0` is now left in default client mode. The `[X]` marks below are from the original v0.0.6 run on `wlan0`; re-run against `wlan1` after the v0.7.0 upgrade.
 
 ## Pre-flight (no network changes yet)
 
@@ -96,7 +98,7 @@ Walk through this on the actual robot to verify the eth0 dual-IP + wlan0 isolate
   ```sh
   racecar setup networking --ssid=racecar-neo-1 --psk='your-password'
   ```
-  Expected: 4 numbered steps, then `Applying netplan...`, then `=== Done ===`. ~5–10 seconds. wlan0 should drop client mode and come up as AP.
+  Expected: 4 numbered steps, then `Applying netplan...`, then `=== Done ===`. ~5–10 seconds. The ALFA dongle (`wlan1`) comes up as AP; `wlan0` is left as a managed client.
 
 ## Verify outcomes
 
@@ -106,19 +108,20 @@ Walk through this on the actual robot to verify the eth0 dual-IP + wlan0 isolate
   ```
   Expected: two `inet` entries — `192.168.52.200/24` (or whatever `--eth-static` you set) AND a DHCP-assigned address.
 
-- [X] wlan0 is in AP mode
+- [X] the ALFA dongle (wlan1) is in AP mode; wlan0 is a client
   ```sh
+  iw dev wlan1 info
   iw dev wlan0 info
   ```
-  Expected: `type AP`, `ssid racecar-neo-1` (or whatever you set), `channel 6`.
+  Expected: `wlan1` shows `type AP`, `ssid racecar-neo-1` (or whatever you set), `channel 6`; `wlan0` shows `type managed`.
 
 - [X] iptables FORWARD reject rules are in place (the "isolation" half)
   ```sh
   sudo iptables-nft -L FORWARD -nv
   ```
-  Expected: two `REJECT` rules near the top — one with `wlan0` in the `in`
-  column, one with `wlan0` in the `out` column. Both should sit ABOVE the
-  `nm-sh-fw-wlan0` chain (so they evaluate first and reject AP→internet
+  Expected: two `REJECT` rules near the top — one with `wlan1` in the `in`
+  column, one with `wlan1` in the `out` column. Both should sit ABOVE the
+  `nm-sh-fw-wlan1` chain (so they evaluate first and reject AP→internet
   traffic before NM's shared-mode FORWARD rules can accept it).
 
   Why `iptables-nft` and not plain `iptables`? On Ubuntu 24.04, NetworkManager
@@ -162,7 +165,7 @@ Walk through this on the actual robot to verify the eth0 dual-IP + wlan0 isolate
   ```sh
   curl -m 3 https://google.com
   ```
-  Expected: timeout or "no route to host". This is the "isolated" half of "wlan0 isolated AP" — the dispatcher's FORWARD REJECT rules at work. If this curl succeeds, the isolation is broken.
+  Expected: timeout or "no route to host". This is the "isolated" half of the ALFA-dongle isolated AP — the dispatcher's FORWARD REJECT rules at work. If this curl succeeds, the isolation is broken.
 
 ## Idempotency (re-run safety)
 
@@ -181,7 +184,7 @@ Walk through this on the actual robot to verify the eth0 dual-IP + wlan0 isolate
 
 - [X] After login (still wired ideally), AP is still up
   ```sh
-  iw dev wlan0 info               # should still show type AP
+  iw dev wlan1 info               # should still show type AP (ALFA dongle)
   ip -br addr show eth0           # should still show static + DHCP
   racecar service status          # all 4 services active=active
   ```

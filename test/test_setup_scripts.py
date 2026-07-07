@@ -132,8 +132,19 @@ class TestNetworkingScript:
         # the racecar-tool can pass overrides without editing the script.
         text = self.SCRIPT.read_text()
         for var in ('RACECAR_AP_SSID', 'RACECAR_AP_PSK', 'RACECAR_AP_CHANNEL',
-                    'RACECAR_AP_ADDR', 'RACECAR_ETH_STATIC'):
+                    'RACECAR_AP_ADDR', 'RACECAR_AP_IFACE', 'RACECAR_ETH_STATIC'):
             assert var in text, f'{var} not referenced in setup_networking.sh'
+
+    def test_ap_on_alfa_dongle_not_wlan0(self):
+        # v0.7.0 moved the AP onto the ALFA dongle (default wlan1) and returns
+        # wlan0 to default client mode. The AP interface must be parameterized,
+        # and the script must reset wlan0 (set it managed).
+        text = self.SCRIPT.read_text()
+        assert 'AP_IFACE' in text, 'AP interface should be parameterized'
+        assert 'wlan1' in text, 'default AP interface (wlan1) not referenced'
+        assert 'device set wlan0 managed' in text, (
+            'setup_networking.sh must reset the Pi built-in wlan0 to managed/client'
+        )
 
     def test_loads_persisted_config(self):
         # The script must source the ~/.config/racecar/networking.env file
@@ -271,6 +282,18 @@ class TestUdevRules:
         text = self.RULES_FILE.read_text()
         assert f'ATTRS{{idVendor}}=="{vid}"' in text, f'VID {vid} not matched'
         assert f'ATTRS{{idProduct}}=="{pid}"' in text, f'PID {pid} not matched'
+
+    def test_alfa_ap_dongle_renamed_to_wlan1(self):
+        # v0.7.0: the ALFA MT7612U (0e8d:7612) hosts the WiFi AP and must be
+        # renamed to a stable wlan1 so setup_networking.sh binds a fixed name
+        # instead of the per-unit MAC-derived wlx<mac>.
+        text = self.RULES_FILE.read_text()
+        alfa = [ln for ln in text.splitlines()
+                if 'ATTRS{idVendor}=="0e8d"' in ln and 'ATTRS{idProduct}=="7612"' in ln]
+        assert alfa, 'no rule matches the ALFA MT7612U (0e8d:7612)'
+        assert any('NAME="wlan1"' in ln for ln in alfa), (
+            'ALFA rule must rename the dongle to wlan1'
+        )
 
     def test_realsense_autosuspend_rule_present(self):
         # RealSense D435i (USB 8086:0b3a). The autosuspend rule matches the usb
