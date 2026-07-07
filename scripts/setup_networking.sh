@@ -19,9 +19,15 @@
 # the AP, the connection will drop when the AP cycles. Run from a wired (eth0)
 # session or directly on the console.
 #
+# Reset mode: RACECAR_AP_RESET=1 disables the AP only (downs and deletes the
+# AP connection on the AP interface), leaves eth0 untouched, and exits. Each car
+# needs a distinct SSID, so the golden image ships with no active AP; `racecar
+# setup networking --reset` uses this before imaging.
+#
 # Parameters (override via environment variables before running):
 #   RACECAR_AP_IFACE      (default: wlan1 — the ALFA dongle)
-#   RACECAR_AP_SSID       (default: racecar-neo-1)
+#   RACECAR_AP_ID         (default: 1 — the number appended to the SSID base)
+#   RACECAR_AP_SSID       (default: racecar-neo-<id> — full SSID override)
 #   RACECAR_AP_PSK        (default: racecar@mit)
 #   RACECAR_AP_CHANNEL    (default: 6)
 #   RACECAR_AP_ADDR       (default: 10.42.0.1/24)
@@ -53,7 +59,10 @@ fi
 echo "=== RACECAR Neo Networking Setup ==="
 
 AP_IFACE="${RACECAR_AP_IFACE:-wlan1}"
-AP_SSID="${RACECAR_AP_SSID:-racecar-neo-1}"
+# SSID is a fixed base plus a per-car ID so multiple cars don't clash. A full
+# RACECAR_AP_SSID still overrides the composed value.
+AP_SSID_BASE="${RACECAR_AP_SSID_BASE:-racecar-neo}"
+AP_SSID="${RACECAR_AP_SSID:-${AP_SSID_BASE}-${RACECAR_AP_ID:-1}}"
 AP_PSK="${RACECAR_AP_PSK:-racecar@mit}"
 AP_CON_NAME="racecar-neo-ap"
 AP_BAND="bg"
@@ -66,6 +75,26 @@ DISPATCHER_PATH="/etc/NetworkManager/dispatcher.d/99-racecar-ap-isolate"
 NETPLAN_ETH_PATH="/etc/netplan/99-racecar-eth0.yaml"
 
 CHANGES_MADE=false
+
+# --- Reset mode: disable the AP only, leave eth0 alone -----------------------
+# Deletes the AP connection so a cloned/golden image ships with no active AP and
+# no baked-in SSID; each car sets its own ID on the next `racecar setup
+# networking`. Connection delete is by name, so it works even if the dongle is
+# absent; bringing the interface down is best-effort.
+if [ "${RACECAR_AP_RESET:-0}" = "1" ]; then
+    echo "Disabling the WiFi AP on $AP_IFACE (reset)..."
+    sudo nmcli connection down "$AP_CON_NAME" >/dev/null 2>&1 || true
+    if nmcli -t -f NAME con show 2>/dev/null | grep -qx "$AP_CON_NAME"; then
+        sudo nmcli connection delete "$AP_CON_NAME" || true
+        echo "  Deleted AP connection '$AP_CON_NAME'."
+    else
+        echo "  No AP connection '$AP_CON_NAME' present."
+    fi
+    sudo ip link set "$AP_IFACE" down 2>/dev/null || true
+    echo "  eth0 configuration left unchanged."
+    echo "=== AP disabled ==="
+    exit 0
+fi
 
 # --- Resolve the AP interface ------------------------------------------------
 # Default wlan1 is the udev-assigned stable name for the ALFA MT7612U

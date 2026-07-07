@@ -146,6 +146,19 @@ class TestNetworkingScript:
             'setup_networking.sh must reset the Pi built-in wlan0 to managed/client'
         )
 
+    def test_reset_mode_disables_ap_only(self):
+        # RACECAR_AP_RESET=1 tears down the AP connection and exits before the
+        # eth0 section (imaging: ship a generic clone with no active AP).
+        text = self.SCRIPT.read_text()
+        assert 'RACECAR_AP_RESET' in text, 'reset mode not handled'
+        assert 'connection delete' in text, 'reset mode must delete the AP connection'
+
+    def test_ssid_composed_from_car_id(self):
+        # SSID is a fixed base plus a per-car ID so multiple cars differ.
+        text = self.SCRIPT.read_text()
+        assert 'RACECAR_AP_ID' in text, 'per-car SSID id not referenced'
+        assert 'racecar-neo' in text, 'SSID base not referenced'
+
     def test_loads_persisted_config(self):
         # The script must source the ~/.config/racecar/networking.env file
         # so the user's persisted overrides apply on every run.

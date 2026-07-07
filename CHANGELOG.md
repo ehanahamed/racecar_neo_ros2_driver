@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-07
+
+Per-car SSID and an AP-disable reset, for imaging a fleet. Each car needs a distinct SSID so multiple robots can roam without colliding, and a golden image must ship with no active AP.
+
+### Added
+
+- **Per-car SSID id.** Plain `racecar setup networking` prompts for this car's ID and sets the SSID to `racecar-neo-<id>` (persisted and reused). `setup_networking.sh` composes the SSID from a fixed base (`racecar-neo`) plus `RACECAR_AP_ID` (default `1`); a full `RACECAR_AP_SSID` still overrides.
+- **AP reset for imaging.** `RACECAR_AP_RESET=1 setup_networking.sh` disables the AP only: downs and deletes the `racecar-neo-ap` connection on the AP interface and exits, leaving eth0 untouched.
+
+### Changed
+
+- **`racecar setup networking --reset`** now disables the wlan1 AP (via the reset mode above) and clears the saved car ID/overrides, instead of only deleting the persisted file. Run it before capturing a golden image. eth0 behavior is unchanged.
+
 ## [0.7.0] - 2026-07-07
 
 Move the WiFi access point off the Pi's built-in `wlan0` onto an attached ALFA MT7612U USB dongle. The dongle is a dedicated AP radio; `wlan0` is returned to default client mode, freeing the Pi's onboard WiFi for normal use.
