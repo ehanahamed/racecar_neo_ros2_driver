@@ -117,9 +117,10 @@ class Telemetry:
     @property
     def rc_normalized(self) -> tuple:
         """
-        The eight FlySky channels mapped from their ~1000-2000 us pulse widths
-        to [-1, 1] (1500 us center), clamped. Channels with no transmitter
-        signal read near 0.
+        Map the eight FlySky channels to [-1, 1].
+
+        Pulse widths (~1000-2000 us, 1500 us center) are clamped to [-1, 1];
+        channels with no transmitter signal read near 0.
         """
         return tuple(max(-1.0, min(1.0, (c - 1500.0) / 500.0)) for c in self.rc)
 

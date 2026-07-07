@@ -1,0 +1,26 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * Coral M.2 (Apex) on Raspberry Pi 5: route the external PCIe controller's MSIs
+ * through the PCIe block's own MSI controller (&pcie1) instead of the small MIP
+ * MSI-X peripheral (&mip1). The MIP domain is shared with the NVMe and cannot
+ * supply the 13 vectors the apex driver requests, so apex fails with
+ * "Couldn't initialize interrupts: -28". pcie1 declares msi-controller and has
+ * enough GIC-backed vectors.
+ *
+ * Equivalent to dtoverlay=pineboards-hat-ai, but board-agnostic (no HAT EEPROM
+ * or fan bits). Applies to any BCM2712 / Pi 5. 4K pages and kernel <= 6.11
+ * still required (kernel 6.12+ breaks gasket separately).
+ */
+
+/ {
+	compatible = "brcm,bcm2712";
+
+	fragment@0 {
+		target = <&pcie1>;
+		__overlay__ {
+			msi-parent = <&pcie1>;
+		};
+	};
+};

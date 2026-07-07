@@ -1,0 +1,52 @@
+diff --git a/src/gasket_interrupt.c b/src/gasket_interrupt.c
+index 3f8339c..82e11c0 100644
+--- a/src/gasket_interrupt.c
++++ b/src/gasket_interrupt.c
+@@ -207,16 +207,30 @@ gasket_interrupt_msix_init(struct gasket_interrupt_data *interrupt_data)
+ 		interrupt_data->eventfd_ctxs[i] = NULL;
+ 	}
+
+-	/* Retry MSIX_RETRY_COUNT times if not enough IRQs are available. */
+-	for (i = 0; i < MSIX_RETRY_COUNT && ret > 0; i++)
+-		ret = pci_enable_msix_exact(interrupt_data->pci_dev,
+-					    interrupt_data->msix_entries,
+-					    interrupt_data->num_interrupts);
+-
+-	if (ret)
+-		return ret > 0 ? -EBUSY : ret;
++	/*
++	 * Try MSI-X first, then fall back to MSI. Hosts whose PCIe MSI
++	 * controller cannot supply num_interrupts MSI-X vectors (e.g. the
++	 * Raspberry Pi 5, where pci_enable_msix_exact returned -ENOSPC/-28)
++	 * still provide enough plain MSI vectors; the apex MSI capability
++	 * supports up to 32, so MSI keeps one vector per source and preserves
++	 * the irq->source lookup in gasket_msix_interrupt_handler().
++	 */
++	ret = pci_alloc_irq_vectors(interrupt_data->pci_dev,
++				    interrupt_data->num_interrupts,
++				    interrupt_data->num_interrupts,
++				    PCI_IRQ_MSIX | PCI_IRQ_MSI);
++	if (ret < 0)
++		return ret;
++	if (ret != interrupt_data->num_interrupts) {
++		pci_free_irq_vectors(interrupt_data->pci_dev);
++		return -EBUSY;
++	}
+ 	interrupt_data->msix_configured = 1;
+
++	for (i = 0; i < interrupt_data->num_interrupts; i++)
++		interrupt_data->msix_entries[i].vector =
++			pci_irq_vector(interrupt_data->pci_dev, i);
++
+ 	for (i = 0; i < interrupt_data->num_interrupts; i++) {
+ 		ret = request_irq(interrupt_data->msix_entries[i].vector,
+ 				  gasket_msix_interrupt_handler, 0,
+@@ -413,7 +427,7 @@ void gasket_interrupt_msix_cleanup(struct gasket_interrupt_data *interrupt_data)
+ 	interrupt_data->num_configured = 0;
+
+ 	if (interrupt_data->msix_configured)
+-		pci_disable_msix(interrupt_data->pci_dev);
++		pci_free_irq_vectors(interrupt_data->pci_dev);
+ 	interrupt_data->msix_configured = 0;
+ 	kfree(interrupt_data->msix_entries);
+ 	interrupt_data->msix_entries = NULL;

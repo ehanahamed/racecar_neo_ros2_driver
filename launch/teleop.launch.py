@@ -7,8 +7,8 @@ RealSense and Teensy LSM9DS1 IMUs into /imu/fused; the RealSense D435i is the
 camera.
 Each sensor/ML/display subsystem can be disabled via a name_enable arg
 (default 'true') -- for instance, edgetpu_enable:=false skips the Coral.
-EdgeTPU is delayed 10s so Coral USB firmware enumerates before
-make_interpreter runs.
+EdgeTPU is staggered 3s so the camera topics are up before it subscribes
+(the M.2 Apex is bound at boot, so no USB-firmware enumeration wait).
 """
 
 import os
@@ -106,9 +106,10 @@ def generate_launch_description():
     # to /camera/color, depth to /camera/depth, and the camera IMU to
     # /imu/realsense (imu_fusion_node merges it into /imu/fused).
     realsense_launch = _gated_include('realsense')
-    # EdgeTPU delayed 10s — Coral USB firmware enumeration (1a6e:089a →
-    # 18d1:9302) needs to complete before make_interpreter runs.
-    edgetpu_launch = _gated_include('edgetpu', delay=10.0)
+    # EdgeTPU short stagger so the camera topics are up before edgetpu_node
+    # subscribes. The M.2 Apex is bound at boot, so the old 10s USB-firmware
+    # enumeration wait is no longer needed.
+    edgetpu_launch = _gated_include('edgetpu', delay=3.0)
     dotmatrix_launch = _gated_include('dotmatrix')
 
     return LaunchDescription([
