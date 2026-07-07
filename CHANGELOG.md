@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-07
+
 ### Fixed
 
 - **IMU frame alignment**: `pit_node` rotates the LSM9DS1 into the RealSense D435i IMU frame (`pit.yaml` `imu.accel_gyro_axis_order: [1, 2, 0]`, `imu.accel_gyro_axis_sign: [-1.0, 1.0, 1.0]`) so `imu_fusion_node` averages coherent data instead of two different frames. Derived on hardware from static gravity across ~10 orientations and confirmed against the camera gyro (per-axis correlation +1.00). The mapping is a reflection (det -1): the LSM9DS1's published accel/gyro frame is left-handed vs the camera; accel and gyro share the convention, so one order/sign serves both. Magnetometer axes are left identity (`/mag` has no live source yet).
