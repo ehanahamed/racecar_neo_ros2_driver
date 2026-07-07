@@ -201,7 +201,10 @@ class TestSetup:
         assert 'No persisted networking config' in result.stdout
 
     def test_networking_reset_removes_persisted_file(self, tmp_path, monkeypatch):
+        # Stub the (destructive, sudo-using) networking script so the test only
+        # exercises the tool's file-clear + dispatch, never the real teardown.
         monkeypatch.setenv('HOME', str(tmp_path))
+        monkeypatch.setenv('RACECAR_NETWORKING_SCRIPT', '/dev/null')
         cfg_dir = tmp_path / '.config' / 'racecar'
         cfg_dir.mkdir(parents=True)
         cfg_file = cfg_dir / 'networking.env'
@@ -209,11 +212,43 @@ class TestSetup:
         result = subprocess.run(
             ['bash', '-c',
              f'set +u; source "{TOOL}"; racecar setup networking --reset'],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, timeout=10,
         )
         assert result.returncode == 0
         assert not cfg_file.exists()
         assert 'Cleared' in result.stdout
+
+    def test_networking_reset_disables_ap(self, tmp_path, monkeypatch):
+        # --reset must invoke the networking script in reset mode
+        # (RACECAR_AP_RESET=1) so it tears down the wlan1 AP.
+        monkeypatch.setenv('HOME', str(tmp_path))
+        marker = tmp_path / 'reset_marker'
+        stub = tmp_path / 'stub.sh'
+        stub.write_text(f'#!/bin/bash\necho "reset=${{RACECAR_AP_RESET:-0}}" > "{marker}"\n')
+        monkeypatch.setenv('RACECAR_NETWORKING_SCRIPT', str(stub))
+        result = subprocess.run(
+            ['bash', '-c',
+             f'set +u; source "{TOOL}"; racecar setup networking --reset'],
+            capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert marker.read_text().strip() == 'reset=1'
+
+    def test_networking_apply_no_prompt_noninteractive(self, tmp_path, monkeypatch):
+        # Plain apply with no TTY must not block on the car-ID prompt; it runs
+        # the (stubbed) script and returns.
+        monkeypatch.setenv('HOME', str(tmp_path))
+        marker = tmp_path / 'apply_marker'
+        stub = tmp_path / 'stub.sh'
+        stub.write_text(f'#!/bin/bash\ntouch "{marker}"\n')
+        monkeypatch.setenv('RACECAR_NETWORKING_SCRIPT', str(stub))
+        result = subprocess.run(
+            ['bash', '-c',
+             f'set +u; source "{TOOL}"; racecar setup networking'],
+            capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL,
+        )
+        assert result.returncode == 0
+        assert marker.exists()
 
     def test_networking_flag_persists_when_combined_with_show(self, tmp_path, monkeypatch):
         # Regression: an earlier impl treated --show as a short-circuit BEFORE

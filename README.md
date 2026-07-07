@@ -198,8 +198,10 @@ Tab completion is registered for subcommands; `racecar launch <TAB>` discovers l
 `scripts/setup_networking.sh` configures two things and is **not** invoked by `setup_all.sh` — it's a separate step because it reconfigures the AP interface and would drop SSH-over-WiFi sessions during a fresh install. Run it from a wired (eth0) session or directly on the console:
 
 ```sh
-racecar setup networking --ssid=racecar-neo-1 --psk='your-password'
+racecar setup networking --psk='your-password'
 ```
+
+With no `--ssid` or saved car ID, it prompts for this car's ID and sets the SSID to `racecar-neo-<id>`, so multiple cars on the same network don't collide. The ID is persisted and reused on later runs.
 
 What it does:
 
@@ -210,7 +212,7 @@ Tunables (persisted to `~/.config/racecar/networking.env` and replayed on every 
 
 | Flag | Default |
 |---|---|
-| `--ssid=NAME` | `racecar-neo-1` |
+| `--ssid=NAME` | `racecar-neo-<id>` (id from the prompt; full override) |
 | `--psk=PASS` | `racecar@mit` |
 | `--channel=N` | `6` |
 | `--ap-addr=CIDR` | `10.42.0.1/24` |
@@ -221,8 +223,10 @@ Inspect / clear the saved overrides:
 
 ```sh
 racecar setup networking --show    # print current persisted values
-racecar setup networking --reset   # delete the file, revert to defaults
+racecar setup networking --reset   # disable the wlan1 AP + clear the saved car ID
 ```
+
+`--reset` disables the AP on `wlan1` (downs and deletes the connection) and clears the saved car ID/overrides, leaving eth0 untouched. Run it before capturing a golden image so the clone ships with no active AP and no baked-in SSID; each car then sets its own ID on first `racecar setup networking`.
 
 Verify after running:
 

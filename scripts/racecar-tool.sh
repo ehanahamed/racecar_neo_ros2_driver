@@ -177,6 +177,8 @@ __RC_SVC_HELP__
                     local cfg_dir="$HOME/.config/racecar"
                     local cfg_file="$cfg_dir/networking.env"
                     mkdir -p "$cfg_dir"
+                    # Overridable so tests can stub the destructive script.
+                    local net_script="${RACECAR_NETWORKING_SCRIPT:-$pkg_dir/scripts/setup_networking.sh}"
 
                     # Load existing persisted values into a local assoc array.
                     local -A vals=()
@@ -229,8 +231,11 @@ Persists any --flag values to ~/.config/racecar/networking.env and then
 runs scripts/setup_networking.sh (eth0 dual-IP + ALFA-dongle isolated AP).
   --ap-iface=NAME  AP interface (default wlan1, the ALFA dongle)
   --show   print current persisted overrides and exit
-  --reset  delete the persisted file (revert to script defaults)
-Persistence runs BEFORE --show or --reset, so
+  --reset  disable the wlan1 AP (down + delete the connection) and clear the
+           saved car ID/overrides; eth0 is left unchanged. Use before imaging.
+With no --ssid or saved car ID, plain `racecar setup networking` prompts for
+this car's ID and sets the SSID to racecar-neo-<id> (so multiple cars differ).
+Persistence runs BEFORE --show, so
   racecar setup networking --ssid=foo --show
 saves foo, then prints the new file contents.
 WARNING: this reconfigures the AP interface. If you're SSH'd over the AP,
@@ -246,7 +251,22 @@ __RC_NET_HELP__
                         fi
                         rm -f "$cfg_file"
                         echo "Cleared $cfg_file; defaults will apply on next run."
-                        return 0
+                        echo "Disabling the wlan1 AP..."
+                        RACECAR_AP_RESET=1 bash "$net_script"
+                        return $?
+                    fi
+
+                    # Prompt for this car's ID (appended to the SSID as
+                    # racecar-neo-<id>) when none is known, so multiple cars
+                    # don't share an SSID. Skipped when an ID or full SSID is
+                    # already set (via --ssid or persisted) or stdin is not a TTY.
+                    if [[ "$action" == "apply" && -z "${vals[RACECAR_AP_SSID]:-}" \
+                          && -z "${vals[RACECAR_AP_ID]:-}" && -t 0 ]]; then
+                        local car_id=""
+                        read -r -p "Enter this car's ID (number appended to 'racecar-neo-', e.g. 1): " car_id
+                        if [[ -n "$car_id" ]]; then
+                            vals[RACECAR_AP_ID]="$car_id"; vals_changed=1
+                        fi
                     fi
 
                     # Persist any new --flag values (applies to apply/show paths).
@@ -254,7 +274,7 @@ __RC_NET_HELP__
                         : > "$cfg_file"
                         chmod 600 "$cfg_file"
                         echo "# racecar networking overrides — managed by 'racecar setup networking'" >> "$cfg_file"
-                        for k in RACECAR_AP_SSID RACECAR_AP_PSK RACECAR_AP_CHANNEL RACECAR_AP_ADDR RACECAR_AP_IFACE RACECAR_ETH_STATIC; do
+                        for k in RACECAR_AP_SSID RACECAR_AP_ID RACECAR_AP_PSK RACECAR_AP_CHANNEL RACECAR_AP_ADDR RACECAR_AP_IFACE RACECAR_ETH_STATIC; do
                             if [[ -n "${vals[$k]:-}" ]]; then
                                 printf '%s="%s"\n' "$k" "${vals[$k]}" >> "$cfg_file"
                             fi
@@ -272,7 +292,7 @@ __RC_NET_HELP__
                         return 0
                     fi
 
-                    bash "$pkg_dir/scripts/setup_networking.sh"
+                    bash "$net_script"
                     ;;
                 *)
                     echo "racecar setup: unknown phase '$phase'" >&2
@@ -610,12 +630,15 @@ Commands:
     setup <phase>       Run a setup script. Phases:
                           all          — setup_all.sh (the 11-phase orchestrator)
                           networking   — eth0 dual-IP + ALFA-dongle isolated AP.
+                                         Prompts for this car's ID (SSID
+                                         racecar-neo-<id>) when none is set.
                                          Flags persist to ~/.config/racecar/networking.env:
                                            --ssid=NAME   --psk=PASS   --channel=N
                                            --ap-addr=CIDR (default 10.42.0.1/24)
                                            --ap-iface=NAME (default wlan1, the ALFA dongle)
                                            --eth-static=CIDR (default 192.168.52.200/24)
-                                           --show / --reset
+                                           --show
+                                           --reset (disable the wlan1 AP + clear saved ID)
                           realsense    — flash D435i firmware from the locally-staged
                                          image (offline; for airgapped units). Reads
                                          /opt/racecar/firmware; idempotent. Flags:
