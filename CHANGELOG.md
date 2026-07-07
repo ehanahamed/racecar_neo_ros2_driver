@@ -17,6 +17,7 @@ NEO-PIT communication maturity: the Teensy now owns the physical PWM limits and 
 
 - **`config/throttle.yaml`**: `max_steering` and `max_speed_forward`/`backward` default to `1.0`. The Teensy owns the physical PWM safety limits now (`speed_pwm_*`/`angle_pwm_*` in firmware config), so the Pi passes the full `[-1, 1]` range; lower `max_speed_*` for finer control.
 - **`dotmatrix_node`** is repurposed from a Pi-SPI MAX7219 driver into a **rasterizer**: it composites `/dotmatrix/text` and `/dotmatrix/pixels` into an 8x24 frame on `/dotmatrix/frame` for the Teensy, and publishes only while there is student content. The idle splash and drive-mode glyph now render on the Teensy. Dropped the luma/SPI device, `block_orientation`/`contrast`/`splash_*` params, and the mode-glyph/label rendering.
+- **`config/pit.yaml`**: `steering_sign` and `speed_sign` set to `-1` to match the ESC and servo polarity on this hardware. With `+1 -> max` firmware PWM mapping, the unflipped signs drove forward/left inverted; the flip lands stick-forward on forward and stick-right on right (verified wheels-up).
 
 ### Removed
 
@@ -24,7 +25,7 @@ NEO-PIT communication maturity: the Teensy now owns the physical PWM limits and 
 
 ### Notes
 
-- **Drive polarity + dot-matrix orientation unverified in this commit.** The firmware PWM mapping is now `+1 -> max` (above neutral); confirm forward/left on hardware and flip `pit.yaml` `speed_sign`/`steering_sign` if needed. The dot-matrix `setPoint` origin/rotation may need a transform to match the old SPI rendering.
+- **Drive polarity settled on hardware (2026-07-06, wheels up).** With the `+1 -> max` firmware mapping, forward and steering read inverted, so `pit.yaml` `speed_sign`/`steering_sign` are both `-1` (see Changed). Reverse required a firmware-side fix (`racecar-pit-firmware` v0.4.0: snap past the ESC brake zone, deeper reverse endpoint); the Pi side is unaffected. Dot-matrix pixel orientation is corrected on the Teensy (firmware bitmap column axis reversed to match Parola text).
 
 ## [0.3.2] - 2026-07-06
 
