@@ -151,6 +151,7 @@ class DotMatrixNode(Node):
         self.declare_parameter('refresh_rate_hz', 15.0)
         self.declare_parameter('scroll_period_sec', 4.0)
         self.declare_parameter('pixels_timeout_sec', 5.0)
+        self.declare_parameter('text_timeout_sec', 6.0)
         self.declare_parameter('splash_message', '>>> Welcome to RACECAR Neo! >>>')
         self.declare_parameter('splash_period_sec', 8.0)
         self.declare_parameter('gamepad_enable_button', 4)
@@ -162,6 +163,7 @@ class DotMatrixNode(Node):
         refresh_rate = float(self.get_parameter('refresh_rate_hz').value)
         self._scroll_period = float(self.get_parameter('scroll_period_sec').value)
         self._pixels_timeout = float(self.get_parameter('pixels_timeout_sec').value)
+        self._text_timeout = float(self.get_parameter('text_timeout_sec').value)
         self._splash_message = self.get_parameter('splash_message').value
         self._splash_period = float(self.get_parameter('splash_period_sec').value)
         self._gamepad_btn = int(self.get_parameter('gamepad_enable_button').value)
@@ -180,6 +182,7 @@ class DotMatrixNode(Node):
 
         self._user_text = ''
         self._text_start = time.monotonic()
+        self._text_stamp = 0.0
         self._pixels_rows: list = []
         self._pixels_stamp = 0.0
         self._mode = MuxMode.IDLE
@@ -208,9 +211,12 @@ class DotMatrixNode(Node):
         )
 
     def _text_cb(self, msg: String):
+        # Stamp every message for the freshness timeout (re-publishing the same
+        # text keeps it up); reset the scroll origin only when the text changes.
+        self._text_stamp = time.monotonic()
         if msg.data != self._user_text:
             self._user_text = msg.data
-            self._text_start = time.monotonic()
+            self._text_start = self._text_stamp
 
     def _pixels_cb(self, msg: UInt8MultiArray):
         try:
@@ -273,7 +279,7 @@ class DotMatrixNode(Node):
         now = time.monotonic()
         if self._pixels_rows and (now - self._pixels_stamp) <= self._pixels_timeout:
             frame = self._rows_to_frame(self._pixels_rows)
-        elif self._user_text:
+        elif self._user_text and (now - self._text_stamp) <= self._text_timeout:
             frame = self._text_frame(self._user_text)
         elif self._splash_message and not self._splash_done:
             elapsed = now - self._splash_start

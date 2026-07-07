@@ -27,12 +27,16 @@ pit_node:
     imu_topic: "/imu/lsm9ds1"
     mag_topic: "/mag"
 
-    # UNVERIFIED against the LSM9DS1 mounting on the PIT PCB. Defaults pass the
-    # raw firmware axes straight through. The physical-axis convention students
-    # expect (accel x=front, y=right, z=up; mag x=back, y=right, z=up) is in
-    # racecar-neo-library physics.py; set order/sign here to match on hardware.
-    imu.accel_gyro_axis_order: [0, 1, 2]
-    imu.accel_gyro_axis_sign: [1.0, 1.0, 1.0]
+    # Rotates the LSM9DS1 into the RealSense D435i IMU frame (the fusion
+    # authority) so imu_fusion_node can average the two. Derived on hardware
+    # (2026-07-07) from static gravity in ~10 orientations and confirmed against
+    # the camera gyro (per-axis correlation +1.00): RS_X=-LSM_Y, RS_Y=+LSM_Z,
+    # RS_Z=+LSM_X. The mapping is a reflection (det -1): the LSM9DS1's published
+    # accel/gyro frame is left-handed vs the camera, so a plain rotation solver
+    # cannot express it; accel and gyro share the convention, so one order/sign
+    # serves both.
+    imu.accel_gyro_axis_order: [1, 2, 0]
+    imu.accel_gyro_axis_sign: [-1.0, 1.0, 1.0]
     imu.mag_axis_order: [0, 1, 2]
     imu.mag_axis_sign: [1.0, 1.0, 1.0]
 

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+### Fixed
+
+- **IMU frame alignment**: `pit_node` rotates the LSM9DS1 into the RealSense D435i IMU frame (`pit.yaml` `imu.accel_gyro_axis_order: [1, 2, 0]`, `imu.accel_gyro_axis_sign: [-1.0, 1.0, 1.0]`) so `imu_fusion_node` averages coherent data instead of two different frames. Derived on hardware from static gravity across ~10 orientations and confirmed against the camera gyro (per-axis correlation +1.00). The mapping is a reflection (det -1): the LSM9DS1's published accel/gyro frame is left-handed vs the camera; accel and gyro share the convention, so one order/sign serves both. Magnetometer axes are left identity (`/mag` has no live source yet).
+- **Dot-matrix stuck text**: `dotmatrix_node` gives `/dotmatrix/text` the same freshness timeout as pixels (`text_timeout_sec`, default 6 s). Text had no timeout, so once shown it scrolled forever and the panel never returned to the mode+glyph default; re-publishing keeps it up.
+
 ## [0.5.0] - 2026-07-07
 
 Battery power and FlySky RC telemetry, already decoded from the Teensy frame, are now exposed as ROS topics and read by the student library. Pairs with `racecar-pit-firmware` v0.5.0 (which fixes the current packing to mA).
