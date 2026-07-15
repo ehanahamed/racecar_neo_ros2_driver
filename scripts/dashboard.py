@@ -48,7 +48,6 @@ RATE_TOPICS = [
     '/motor',
     '/mux_out',
     '/imu/fused',
-    '/imu/realsense',
     '/imu/lsm9ds1',
     '/scan',
     '/edgetpu/inference',
@@ -56,6 +55,7 @@ RATE_TOPICS = [
 # DISPLAY_RATE_TOPICS includes all topics that appear in responses
 DISPLAY_RATE_TOPICS = [
     *RATE_TOPICS,
+    '/imu/realsense',
     '/camera/color',
     '/camera/depth',
 ]
@@ -112,10 +112,12 @@ class _RateSampler(Node):
         self._diagnostic_rates = {
             '/camera/color': None,
             '/camera/depth': None,
+            '/imu/realsense': None,
         }
         self._diagnostic_last_update = {
             '/camera/color': None,
             '/camera/depth': None,
+            '/imu/realsense': None,
         }
         self._diagnostics_sub = self.create_subscription(
             DiagnosticArray,
@@ -134,11 +136,12 @@ class _RateSampler(Node):
                 dq.popleft()
 
     def _record_diagnostics(self, msg: DiagnosticArray):
-        """Extract camera color and depth rates from /diagnostics topic."""
+        """Extract color, depth, and imu rates from /diagnostics topic for RealSense."""
         now = time.monotonic()
         diagnostic_name_to_topic = {
             'camera: color': '/camera/color',
             'camera: depth': '/camera/depth',
+            'camera: accel': '/imu/realsense',
         }
         updates = {}
         for status in msg.status:
