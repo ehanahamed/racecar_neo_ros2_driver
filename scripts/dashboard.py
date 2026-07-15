@@ -182,7 +182,7 @@ class _RateSampler(Node):
                 log.debug('Skipping %s: %s', topic, exc)
                 continue
             self._subs[topic] = self.create_subscription(
-                msg_cls, topic, lambda _msg, t=topic: self._record(t), self._qos,
+                msg_cls, topic, lambda _msg, t=topic: self._record(t), self._qos, raw=True
             )
 
     def measure_hz(self, topic: str):
