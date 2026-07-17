@@ -31,13 +31,13 @@ def generate_launch_description():
 
     depth_profile_arg = DeclareLaunchArgument(
         'depth_profile',
-        default_value='640x480x15',
+        default_value='640x480x30',
         description='Depth and infrared stream profile (widthxheightxfps)'
     )
 
     color_profile_arg = DeclareLaunchArgument(
         'color_profile',
-        default_value='640x480x15',
+        default_value='640x480x60',
         description='Color stream profile (widthxheightxfps)'
     )
 
